@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, useWindowDimensions, Share } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, useWindowDimensions, Share, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -96,7 +96,7 @@ const RedDie = ({ value }) => {
 };
 
 // Decorative Gold Coin component
-const GoldCoin = ({ size = 20, style }) => (
+const GoldCoin = React.memo(({ size = 20, style }) => (
   <View style={style} pointerEvents="none">
     <LinearGradient
       colors={['#FFD700', '#FDB931', '#B8860B']}
@@ -106,10 +106,9 @@ const GoldCoin = ({ size = 20, style }) => (
       <View className="w-[40%] h-[40%] bg-[#8B0000]/20 rounded-sm" style={{ borderWidth: 1, borderColor: '#DAA520' }} />
     </LinearGradient>
   </View>
-);
+));
 
-// Decorative Red Envelope component
-const RedEnvelope = ({ size = 30, style }) => (
+const RedEnvelope = React.memo(({ size = 30, style }) => (
   <View style={style} pointerEvents="none">
     <View
       className="bg-[#C41E3A] rounded-lg shadow-md items-center justify-center p-1"
@@ -120,9 +119,227 @@ const RedEnvelope = ({ size = 30, style }) => (
       </View>
     </View>
   </View>
-);
+));
 
-const BlossomBranch = ({ type = 'peach', style }) => {
+const SessionListComponent = React.memo(({ sessions, setCurrentSessionId, editSessionName, deleteSession, createSession, GoldCoin }) => {
+  return (
+    <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>
+      <View className="px-6 pt-8 pb-4 flex-row justify-between items-center">
+        <View>
+          <Text className="text-[#8B0000] text-3xl font-black tracking-tight">Cái tết ấm no</Text>
+          <Text className="text-[#8B0000]/50 text-sm font-medium mt-1">Chọn hoặc tạo bàn chơi mới</Text>
+        </View>
+        <TouchableOpacity
+          onPress={createSession}
+          className="bg-[#D41F3D] p-3.5 rounded-2xl shadow-lg active:scale-95"
+          style={{ shadowColor: '#D41F3D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}
+        >
+          <Plus size={28} color="white" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView className="flex-1 px-4 mt-2" showsVerticalScrollIndicator={false}>
+        {sessions.length === 0 ? (
+          <View className="items-center justify-center mt-20 opacity-30">
+            <View className="bg-gray-100 p-8 rounded-full mb-4">
+              <Settings size={60} color="#8B0000" />
+            </View>
+            <Text className="text-[#8B0000] text-lg font-bold">Chưa có bàn nào</Text>
+            <Text className="text-[#8B0000]/60 text-sm">Nhấn dấu + để bắt đầu</Text>
+          </View>
+        ) : (
+          sessions.map((session) => {
+            const totals = calculateSessionTotals(session);
+            const winnerIdx = totals.indexOf(Math.max(...totals));
+
+            return (
+              <TouchableOpacity
+                key={session.id}
+                onPress={() => setCurrentSessionId(session.id)}
+                onLongPress={() => {
+                  Alert.alert('Tùy chọn', 'Bạn muốn làm gì với bàn này?', [
+                    { text: 'Hủy', style: 'cancel' },
+                    { text: 'Đổi tên', onPress: () => editSessionName(session) },
+                    { text: 'Xóa', style: 'destructive', onPress: () => deleteSession(session.id) }
+                  ]);
+                }}
+                className="bg-white p-5 rounded-[32px] mb-4 border border-gray-100 flex-row items-center justify-between shadow-sm"
+              >
+                <View className="flex-1">
+                  <Text className="text-[#8B0000] text-xl font-bold">{session.name}</Text>
+                  <Text className="text-gray-400 text-xs mt-1">
+                    {new Date(session.createdAt).toLocaleDateString('vi-VN')} • {session.players.length} người chơi
+                  </Text>
+
+                  <View className="flex-row mt-3 items-center">
+                    {session.players.slice(0, 3).map((p, i) => (
+                      <View key={i} className="bg-gray-100 px-2.5 py-1 rounded-full mr-1.5">
+                        <Text className="text-gray-600 text-[10px] font-bold">{p}</Text>
+                      </View>
+                    ))}
+                    {session.players.length > 3 && (
+                      <Text className="text-gray-300 text-[10px] ml-1">+{session.players.length - 3}</Text>
+                    )}
+                  </View>
+                </View>
+
+                <View className="flex-row items-center">
+                  <View className="items-end mr-3">
+                    <Text className="text-gray-400 text-[8px] font-black uppercase tracking-widest leading-none mb-0.5">Rich Kid</Text>
+                    <Text className="text-blue-600 text-[11px] font-black uppercase tracking-tight" numberOfLines={1}>
+                      {session.players[winnerIdx]}
+                    </Text>
+                  </View>
+                  {totals[winnerIdx] > 0 && (
+                    <View className="bg-[#FFD700]/30 px-2 py-1.5 rounded-xl border border-[#FFD700]/50 shadow-sm">
+                      <Text className="text-[#8B0000] text-[10px] font-black">🔥 {totals[winnerIdx]}</Text>
+                    </View>
+                  )}
+                </View>
+                {GoldCoin && <GoldCoin size={15} style={{ position: 'absolute', top: -5, right: 10, opacity: 0.6 }} />}
+              </TouchableOpacity>
+            );
+          })
+        )}
+
+        {/* Creator Signature */}
+        <View className="items-center mt-16 mb-8 opacity-30">
+          <Text className="text-[#8B0000] text-[12px] font-black uppercase tracking-[4px]">Dân Chơi Tính Tiền</Text>
+          <Text className="text-[#8B0000] text-[10px] font-bold uppercase tracking-[2px] mt-1 opacity-60">Created by</Text>
+          <Text className="text-[#8B0000] text-2xl font-black italic mt-1" style={{ letterSpacing: 1 }}>Khoa Ryo</Text>
+          <View className="w-16 h-[2px] bg-[#FFD700] mt-3 rounded-full" />
+        </View>
+
+        <View className="h-24" />
+      </ScrollView>
+    </SafeAreaView>
+  );
+});
+
+const TableBodyComponent = React.memo(({
+  currentSession, totals, isHidden, indexColWidth, colWidth, tableScrollRef,
+  editPlayerName, removePlayer, deleteRound, updateRoundValue, addRound, finalizeRounds, setShowEnd, isKeyboardVisible, inputRefs, handleInputSubmit
+}) => {
+  return (
+    <>
+      <View className="bg-[#FFF8E1] border-b-2 border-[#FFD700] shadow-sm z-10 py-1.5 px-2 mt-2">
+        <View className="flex-row items-center">
+          <View style={{ width: indexColWidth }} className="mr-1 items-center justify-center">
+            <Sigma size={14} color="#8B0000" />
+          </View>
+          {currentSession.players.map((name, idx) => (
+            <View key={idx} style={{ width: colWidth }} className="mr-1 items-center">
+              <TouchableOpacity
+                onPress={() => editPlayerName(idx)}
+                onLongPress={() => removePlayer(idx)}
+                className="w-full items-center mb-1"
+              >
+                <Text className="text-[#8B0000] text-[10px] font-black uppercase tracking-tighter" numberOfLines={1}>{name}</Text>
+              </TouchableOpacity>
+              <Text className={`text-base font-black ${totals[idx] >= 0 ? 'text-blue-800' : 'text-red-700'}`}>
+                {isHidden ? '***' : (totals[idx] > 0 ? `+${totals[idx]}` : totals[idx])}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <ScrollView
+        ref={tableScrollRef}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 50 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        nestedScrollEnabled={true}
+      >
+        {currentSession.rounds.map((round, rIdx) => (
+          <View
+            key={rIdx}
+            className={`flex-row items-center py-2.5 px-2 border-b border-white/5 ${rIdx % 2 === 0 ? 'bg-white/5' : ''}`}
+          >
+            <TouchableOpacity
+              onLongPress={() => deleteRound(rIdx)}
+              activeOpacity={0.6}
+              style={{ width: indexColWidth }}
+              className="h-7 items-center justify-center rounded-md mr-1 bg-[#FFD700]/30"
+            >
+              <Text className="text-[#8B0000] text-xs font-black">{rIdx + 1}</Text>
+            </TouchableOpacity>
+
+            {round.map((val, pIdx) => (
+              <View key={pIdx} style={{ width: colWidth }} className="mr-1 h-14">
+                <TextInput
+                  ref={el => inputRefs.current[`${rIdx}-${pIdx}`] = el}
+                  keyboardType="numeric"
+                  className="text-center text-[#8B0000] font-bold text-base w-full h-full"
+                  value={isHidden ? '***' : (val === '0' ? '' : val)}
+                  onChangeText={(text) => !isHidden && updateRoundValue(rIdx, pIdx, text)}
+                  onSubmitEditing={() => handleInputSubmit(rIdx, pIdx)}
+                  returnKeyType={pIdx === currentSession.players.length - 1 ? 'done' : 'next'}
+                  blurOnSubmit={pIdx === currentSession.players.length - 1}
+                  placeholder="0"
+                  placeholderTextColor="rgba(17, 17, 17, 0.4)"
+                  selectTextOnFocus
+                  editable={!isHidden}
+                  pointerEvents="none"
+                />
+                <TouchableOpacity
+                  className="absolute inset-0"
+                  activeOpacity={1}
+                  onPress={() => inputRefs.current[`${rIdx}-${pIdx}`]?.focus()}
+                />
+              </View>
+            ))}
+            <View className="w-8" />
+          </View>
+        ))}
+
+        <View className="flex-row px-2 py-4">
+          <View style={{ width: indexColWidth }} className="items-center justify-center mr-1">
+            <TouchableOpacity
+              onPress={addRound}
+              className="bg-[#FFD700] w-9 h-9 rounded-full items-center justify-center shadow-md active:scale-90"
+              style={{ shadowColor: '#FFD700', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 4 }}
+            >
+              <Plus size={22} color="#8B0000" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View className="items-center mt-16 mb-2 opacity-40">
+          <Text className="text-[#8B0000] text-[12px] font-black uppercase tracking-[3px]">Dân Chơi Tính Tiền</Text>
+          <Text className="text-[#8B0000] text-[10px] font-bold uppercase tracking-[2px] mt-0.5 opacity-60">Created by</Text>
+          <Text className="text-[#8B0000] text-lg font-black italic mt-1" style={{ letterSpacing: 1 }}>Khoa Ryo</Text>
+          <View className="w-12 h-[1px] bg-[#FFD700] mt-2" />
+        </View>
+        <View className="h-52" />
+      </ScrollView>
+
+      {!isKeyboardVisible && (
+        <View className="absolute bottom-6 left-5 right-5 h-16 rounded-3xl shadow-xl flex-row overflow-hidden border border-gray-100 bg-white/95">
+          <TouchableOpacity onPress={() => setIsHidden(!isHidden)} className="flex-1 items-center justify-center border-r border-gray-100">
+            <EyeOff size={22} color={isHidden ? '#ccc' : '#D41F3D'} />
+            <Text className={`${isHidden ? 'text-gray-400' : 'text-[#D41F3D]'} text-[10px] font-black mt-1 uppercase`}>Ẩn</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={addRound} className="flex-1 items-center justify-center border-r border-gray-100">
+            <Plus size={24} color="#D41F3D" />
+            <Text className="text-[#D41F3D] text-[10px] font-black mt-1 uppercase">Thêm</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={finalizeRounds} className="flex-1 items-center justify-center border-r border-gray-100">
+            <CheckCheck size={22} color="#D41F3D" />
+            <Text className="text-[#D41F3D] text-[10px] font-black mt-1 uppercase">Chốt số</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowEnd(true)} className="flex-1 items-center justify-center">
+            <Flag size={22} color="#D41F3D" />
+            <Text className="text-[#D41F3D] text-[10px] font-black mt-1 uppercase">Kết thúc</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </>
+  );
+});
+const BlossomBranch = React.memo(({ type, style }) => {
   const isPeach = type === 'peach';
   const petalColor1 = isPeach ? '#FFC0CB' : '#FFFACD';
   const petalColor2 = isPeach ? '#FF69B4' : '#FFD700';
@@ -156,6 +373,88 @@ const BlossomBranch = ({ type = 'peach', style }) => {
       </View>
     </View>
   );
+});
+const CustomInputModal = React.memo(({ modal, setModal }) => {
+  if (!modal.visible) return null;
+
+  return (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View className="absolute inset-0 bg-black/50 items-center justify-center z-[60]">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          className="w-full items-center"
+        >
+          <View className="bg-white p-7 rounded-[40px] w-[88%] shadow-2xl items-center">
+            <View className="bg-orange-50 p-4 rounded-full mb-4">
+              {modal.icon ? React.cloneElement(modal.icon, { color: '#D41F3D', size: 32 }) : <Plus size={32} color="#D41F3D" />}
+            </View>
+            <Text className="text-xl font-black mb-2 text-[#8B0000] uppercase tracking-tight">{modal.title}</Text>
+            <Text className="text-gray-400 text-center mb-6 font-medium px-2">{modal.description}</Text>
+
+            <TextInput
+              className="w-full bg-gray-50 p-4 rounded-2xl text-lg font-bold text-gray-800 mb-8 border border-gray-100"
+              placeholder={modal.placeholder}
+              value={modal.value}
+              onChangeText={(text) => setModal({ ...modal, value: text })}
+              autoFocus
+              selectTextOnFocus={true}
+              clearButtonMode="while-editing"
+            />
+
+            <View className="flex-row w-full gap-3">
+              <TouchableOpacity
+                onPress={() => setModal({ ...modal, visible: false })}
+                className="flex-1 bg-gray-100 py-4 rounded-2xl items-center"
+              >
+                <Text className="text-gray-500 font-bold">Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  modal.onConfirm(modal.value);
+                  setModal({ ...modal, visible: false });
+                }}
+                className="flex-1 bg-[#D41F3D] py-4 rounded-2xl items-center shadow-lg active:scale-95"
+              >
+                <Text className="text-white font-black uppercase">Xác nhận</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </TouchableWithoutFeedback>
+  );
+});
+
+const StaticBackground = React.memo(() => (
+  <>
+    {/* Main Decorative Branches */}
+    <BlossomBranch type="peach" style={{ position: 'absolute', top: -30, right: -40, zIndex: 0, transform: [{ scale: 1.5 }, { rotate: '-15deg' }] }} />
+    <BlossomBranch type="apricot" style={{ position: 'absolute', top: '40%', left: -50, zIndex: 0, transform: [{ scale: 1.2 }, { rotate: '160deg' }] }} />
+
+    {/* Central Background Branches (Low Opacity) */}
+    <BlossomBranch type="peach" style={{ position: 'absolute', top: '25%', right: '15%', zIndex: 0, opacity: 0.15, transform: [{ scale: 1.8 }, { rotate: '10deg' }] }} />
+    <BlossomBranch type="apricot" style={{ position: 'absolute', bottom: '30%', left: '10%', zIndex: 0, opacity: 0.15, transform: [{ scale: 1.6 }, { rotate: '-150deg' }] }} />
+
+    <BlossomBranch type="peach" style={{ position: 'absolute', bottom: -20, right: -30, zIndex: 0, transform: [{ scale: 1.3 }, { rotate: '190deg' }] }} />
+
+    {/* Floating Subtle Elements */}
+    <GoldCoin size={35} style={{ position: 'absolute', top: 120, left: 30, opacity: 0.12, transform: [{ rotate: '15deg' }] }} />
+    <GoldCoin size={25} style={{ position: 'absolute', bottom: 250, right: 40, opacity: 0.1, transform: [{ rotate: '-20deg' }] }} />
+    <RedEnvelope size={40} style={{ position: 'absolute', top: '65%', left: 20, opacity: 0.08, transform: [{ rotate: '-10deg' }] }} />
+    <RedEnvelope size={30} style={{ position: 'absolute', top: 200, right: 30, opacity: 0.06, transform: [{ rotate: '25deg' }] }} />
+  </>
+));
+
+const calculateSessionTotals = (session) => {
+  const totals = session.players.map((_, i) => (session.baseline ? parseFloat(session.baseline[i] || 0) : 0));
+  session.rounds.forEach(round => {
+    round.forEach((val, idx) => {
+      if (idx < totals.length) {
+        totals[idx] += parseFloat(val || 0);
+      }
+    });
+  });
+  return totals;
 };
 
 export default function App() {
@@ -171,7 +470,9 @@ export default function App() {
   const [showDice, setShowDice] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showEnd, setShowEnd] = useState(false);
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const inputRefs = React.useRef({});
+  const tableScrollRef = React.useRef(null);
   const [inputModal, setInputModal] = useState({
     visible: false,
     title: '',
@@ -211,8 +512,15 @@ export default function App() {
       }
     };
     loadData();
-  }, []);
 
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
   useEffect(() => {
     if (!isLoaded) return;
     const saveData = async () => {
@@ -227,6 +535,21 @@ export default function App() {
   }, [sessions, isLoaded]);
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
+
+  // Controlled Auto-scroll: Only when round count changes
+  useEffect(() => {
+    if (currentSessionId && currentSession?.rounds?.length > 0) {
+      const timer = setTimeout(() => {
+        if (tableScrollRef.current) {
+          tableScrollRef.current.scrollToEnd({ animated: true });
+        }
+        // Auto-focus the first input of the new row
+        const newRowIdx = currentSession.rounds.length - 1;
+        inputRefs.current[`${newRowIdx}-0`]?.focus();
+      }, 500); // Reduced delay for better feel
+      return () => clearTimeout(timer);
+    }
+  }, [currentSession?.rounds?.length]);
 
   const createSession = () => {
     setInputModal({
@@ -243,7 +566,7 @@ export default function App() {
           id,
           name: finalName,
           players: ['Người 1', 'Người 2', 'Người 3', 'Người 4'],
-          rounds: [],
+          rounds: [['0', '0', '0', '0']],
           baseline: [0, 0, 0, 0], // Store starting/carried over values
           createdAt: new Date().toISOString()
         };
@@ -251,6 +574,23 @@ export default function App() {
         setCurrentSessionId(newSession.id);
       },
       icon: <Plus size={32} color="#8B0000" />
+    });
+  };
+
+  const editSessionName = (session) => {
+    setInputModal({
+      visible: true,
+      title: 'Đổi tên bàn',
+      description: 'Nhập tên mới cho bàn này',
+      placeholder: 'Nhập tên bàn...',
+      value: session.name,
+      type: 'rename-session',
+      onConfirm: (name) => {
+        if (name && name.trim()) {
+          updateSession({ ...session, name: name.trim() });
+        }
+      },
+      icon: <Settings size={32} color="#8B0000" />
     });
   };
 
@@ -286,96 +626,7 @@ export default function App() {
     ]);
   };
 
-  // Session List Screen Component
-  const SessionList = () => (
-    <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>
-      <View className="px-6 pt-8 pb-4 flex-row justify-between items-center">
-        <View>
-          <Text className="text-[#8B0000] text-3xl font-black tracking-tight">Danh sách Bàn</Text>
-          <Text className="text-[#8B0000]/50 text-sm font-medium mt-1">Chọn hoặc tạo bàn chơi mới</Text>
-        </View>
-        <TouchableOpacity
-          onPress={createSession}
-          className="bg-[#D41F3D] p-3.5 rounded-2xl shadow-lg active:scale-95"
-          style={{ shadowColor: '#D41F3D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}
-        >
-          <Plus size={28} color="white" />
-        </TouchableOpacity>
-      </View>
 
-      <ScrollView className="flex-1 px-4 mt-2" showsVerticalScrollIndicator={false}>
-        {sessions.length === 0 ? (
-          <View className="items-center justify-center mt-20 opacity-30">
-            <View className="bg-gray-100 p-8 rounded-full mb-4">
-              <Settings size={60} color="#8B0000" />
-            </View>
-            <Text className="text-[#8B0000] text-lg font-bold">Chưa có bàn nào</Text>
-            <Text className="text-[#8B0000]/60 text-sm">Nhấn dấu + để bắt đầu</Text>
-          </View>
-        ) : (
-          sessions.map((session) => {
-            const totals = calculateSessionTotals(session);
-            const winnerIdx = totals.indexOf(Math.max(...totals));
-
-            return (
-              <TouchableOpacity
-                key={session.id}
-                onPress={() => setCurrentSessionId(session.id)}
-                onLongPress={() => deleteSession(session.id)}
-                className="bg-white p-5 rounded-[32px] mb-4 border border-gray-100 flex-row items-center justify-between shadow-sm"
-              >
-                <View className="flex-1">
-                  <Text className="text-[#8B0000] text-xl font-bold">{session.name}</Text>
-                  <Text className="text-gray-400 text-xs mt-1">
-                    {new Date(session.createdAt).toLocaleDateString('vi-VN')} • {session.players.length} người chơi
-                  </Text>
-
-                  <View className="flex-row mt-3 items-center">
-                    {session.players.slice(0, 3).map((p, i) => (
-                      <View key={i} className="bg-gray-100 px-2.5 py-1 rounded-full mr-1.5">
-                        <Text className="text-gray-600 text-[10px] font-bold">{p}</Text>
-                      </View>
-                    ))}
-                    {session.players.length > 3 && (
-                      <Text className="text-gray-300 text-[10px] ml-1">+{session.players.length - 3}</Text>
-                    )}
-                  </View>
-                </View>
-
-                <View className="flex-row items-center">
-                  <View className="items-end mr-3">
-                    <Text className="text-gray-400 text-[8px] font-black uppercase tracking-widest leading-none mb-0.5">Người thắng</Text>
-                    <Text className="text-blue-600 text-[11px] font-black uppercase tracking-tight" numberOfLines={1}>
-                      {session.players[winnerIdx]}
-                    </Text>
-                  </View>
-                  {totals[winnerIdx] > 0 && (
-                    <View className="bg-[#FFD700]/30 px-2 py-1.5 rounded-xl border border-[#FFD700]/50 shadow-sm">
-                      <Text className="text-[#8B0000] text-[10px] font-black">🔥 {totals[winnerIdx]}</Text>
-                    </View>
-                  )}
-                </View>
-                <GoldCoin size={15} style={{ position: 'absolute', top: -5, right: 10, opacity: 0.6 }} />
-              </TouchableOpacity>
-            );
-          })
-        )}
-        <View className="h-20" />
-      </ScrollView>
-    </SafeAreaView>
-  );
-
-  const calculateSessionTotals = (session) => {
-    const totals = session.players.map((_, i) => (session.baseline ? parseFloat(session.baseline[i] || 0) : 0));
-    session.rounds.forEach(round => {
-      round.forEach((val, idx) => {
-        if (idx < totals.length) {
-          totals[idx] += parseFloat(val || 0);
-        }
-      });
-    });
-    return totals;
-  };
 
   const updateSession = (updatedSession) => {
     setSessions(sessions.map(s => s.id === updatedSession.id ? updatedSession : s));
@@ -440,6 +691,26 @@ export default function App() {
     const updatedRounds = [...currentSession.rounds];
     updatedRounds[roundIdx][playerIdx] = value;
     updateSession({ ...currentSession, rounds: updatedRounds });
+  };
+
+  const handleInputSubmit = (rIdx, pIdx) => {
+    const val = currentSession.rounds[rIdx][pIdx];
+    // Requirement 3: If no value, fill 0
+    if (val.trim() === '') {
+      updateRoundValue(rIdx, pIdx, '0');
+    }
+
+    // Requirement 1: Jump to next input
+    const nextPIdx = pIdx + 1;
+    if (nextPIdx < currentSession.players.length) {
+      setTimeout(() => {
+        inputRefs.current[`${rIdx}-${nextPIdx}`]?.focus();
+      }, 100);
+    } else if (rIdx === currentSession.rounds.length - 1) {
+      // Last player of the LAST row -> Add new row
+      // The auto-scroll useEffect will handle the focus
+      addRound();
+    }
   };
 
   const deleteRound = (idx) => {
@@ -561,6 +832,7 @@ export default function App() {
   const minUsableWidth = 55;
   const calculatedWidth = currentSession ? (availableWidth / Math.max(1, currentSession.players.length)) - 2 : minUsableWidth;
   const isScrollEnabled = calculatedWidth < minUsableWidth;
+
   const colWidth = isScrollEnabled ? minUsableWidth : calculatedWidth;
 
   return (
@@ -571,29 +843,22 @@ export default function App() {
           colors={['#FFF8E1', '#FADADD', '#FFF8E1']}
           className="flex-1"
         >
-          {/* Main Decorative Branches */}
-          <BlossomBranch type="peach" style={{ position: 'absolute', top: -30, right: -40, zIndex: 0, transform: [{ scale: 1.5 }, { rotate: '-15deg' }] }} />
-          <BlossomBranch type="apricot" style={{ position: 'absolute', top: '40%', left: -50, zIndex: 0, transform: [{ scale: 1.2 }, { rotate: '160deg' }] }} />
-
-          {/* Central Background Branches (Low Opacity) */}
-          <BlossomBranch type="peach" style={{ position: 'absolute', top: '25%', right: '15%', zIndex: 0, opacity: 0.15, transform: [{ scale: 1.8 }, { rotate: '10deg' }] }} />
-          <BlossomBranch type="apricot" style={{ position: 'absolute', bottom: '30%', left: '10%', zIndex: 0, opacity: 0.15, transform: [{ scale: 1.6 }, { rotate: '-150deg' }] }} />
-
-          <BlossomBranch type="peach" style={{ position: 'absolute', bottom: -20, right: -30, zIndex: 0, transform: [{ scale: 1.3 }, { rotate: '190deg' }] }} />
-
-          {/* Floating Subtle Elements */}
-          <GoldCoin size={35} style={{ position: 'absolute', top: 120, left: 30, opacity: 0.12, transform: [{ rotate: '15deg' }] }} />
-          <GoldCoin size={25} style={{ position: 'absolute', bottom: 250, right: 40, opacity: 0.1, transform: [{ rotate: '-20deg' }] }} />
-          <RedEnvelope size={40} style={{ position: 'absolute', top: '65%', left: 20, opacity: 0.08, transform: [{ rotate: '-10deg' }] }} />
-          <RedEnvelope size={30} style={{ position: 'absolute', top: 200, right: 30, opacity: 0.06, transform: [{ rotate: '25deg' }] }} />
+          <StaticBackground />
 
           {!currentSessionId ? (
-            <SessionList />
+            <SessionListComponent
+              sessions={sessions}
+              setCurrentSessionId={setCurrentSessionId}
+              editSessionName={editSessionName}
+              deleteSession={deleteSession}
+              createSession={createSession}
+              GoldCoin={GoldCoin}
+            />
           ) : (
             <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>
               {/* Header Icons */}
               <View className="px-5 pt-4 pb-1 flex-row justify-between items-center">
-                <View className="flex-row">
+                <View className="flex-1 flex-row">
                   <TouchableOpacity
                     onPress={() => setCurrentSessionId(null)}
                     className="bg-white p-2.5 rounded-full mr-2 shadow-sm active:scale-95"
@@ -610,12 +875,12 @@ export default function App() {
 
                 <TouchableOpacity
                   onPress={renameSession}
-                  className="bg-white px-5 py-1.5 rounded-full shadow-sm border border-gray-100 max-w-[40%]"
+                  className="bg-white px-4 py-1.5 rounded-full shadow-sm border border-gray-100 max-w-[30%] items-center mx-2"
                 >
                   <Text className="text-[#8B0000] font-bold text-base" numberOfLines={1}>{currentSession.name}</Text>
                 </TouchableOpacity>
 
-                <View className="flex-row">
+                <View className="flex-1 flex-row justify-end">
                   <TouchableOpacity onPress={addPlayer} className="bg-white p-2.5 rounded-full mr-2 shadow-sm active:scale-95">
                     <UserPlus size={22} color="#D41F3D" />
                   </TouchableOpacity>
@@ -628,128 +893,73 @@ export default function App() {
                 </View>
               </View>
 
-              {/* Table Container */}
-              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
-                <ScrollView
-                  horizontal={isScrollEnabled}
-                  showsHorizontalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
-                >
-                  <View style={{ width: isScrollEnabled ? 'auto' : windowWidth }}>
-                    {/* Headers Section */}
-                    <View className="flex-row px-2 pt-2 items-center">
-                      <View style={{ width: indexColWidth }} className="mr-1" />
-                      {currentSession.players.map((name, idx) => (
-                        <TouchableOpacity
-                          key={idx}
-                          onPress={() => editPlayerName(idx)}
-                          onLongPress={() => removePlayer(idx)}
-                          style={{ width: colWidth }}
-                          className="bg-[#FFF8E1] h-10 justify-center rounded-xl mr-1 items-center shadow-sm border border-[#FFD700]/30"
-                        >
-                          <Text className="text-[#8B0000] text-[11px] font-black uppercase truncate px-1" numberOfLines={1}>{name}</Text>
-                        </TouchableOpacity>
-                      ))}
+              {/* Table Area */}
+              <View className="flex-1">
+                {isScrollEnabled ? (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={{ flexGrow: 1 }}
+                  >
+                    <View style={{ width: 'auto', flex: 1 }}>
+                      <TableBodyComponent
+                        currentSession={currentSession}
+                        totals={totals}
+                        isHidden={isHidden}
+                        indexColWidth={indexColWidth}
+                        colWidth={colWidth}
+                        tableScrollRef={tableScrollRef}
+                        editPlayerName={editPlayerName}
+                        removePlayer={removePlayer}
+                        deleteRound={deleteRound}
+                        updateRoundValue={updateRoundValue}
+                        addRound={addRound}
+                        finalizeRounds={finalizeRounds}
+                        setShowEnd={setShowEnd}
+                        isKeyboardVisible={isKeyboardVisible}
+                        inputRefs={inputRefs}
+                        handleInputSubmit={handleInputSubmit}
+                      />
                     </View>
-
-                    {/* Total/Summary Row */}
-                    <View className="flex-row items-center py-3 px-2 border-b-2 border-[#FFD700] bg-[#FFF8E1] shadow-sm z-10">
-                      <View style={{ width: indexColWidth }} className="h-8 items-center justify-center rounded-xl mr-1 bg-[#8B0000]">
-                        <Sigma size={16} color="white" />
-                      </View>
-                      {totals.map((total, idx) => (
-                        <View key={idx} style={{ width: colWidth }} className="mr-1 items-center justify-center h-12">
-                          <Text className={`text-base font-black ${total >= 0 ? 'text-blue-800' : 'text-red-700'}`}>
-                            {isHidden ? '***' : (total > 0 ? `+${total}` : total)}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-
-                    {/* Rows Section */}
-                    <ScrollView
-                      className="flex-1"
-                      showsVerticalScrollIndicator={false}
-                      keyboardShouldPersistTaps="handled"
-                      keyboardDismissMode="on-drag"
-                    >
-                      {currentSession.rounds.map((round, rIdx) => (
-                        <View
-                          key={rIdx}
-                          className={`flex-row items-center py-2.5 px-2 border-b border-white/5 ${rIdx % 2 === 0 ? 'bg-white/5' : ''}`}
-                        >
-                          <TouchableOpacity
-                            onLongPress={() => deleteRound(rIdx)}
-                            activeOpacity={0.6}
-                            style={{ width: indexColWidth }}
-                            className="h-7 items-center justify-center rounded-md mr-1 bg-[#FFD700]/30"
-                          >
-                            <Text className="text-[#8B0000] text-xs font-black">{rIdx + 1}</Text>
-                          </TouchableOpacity>
-
-                          {round.map((val, pIdx) => (
-                            <View key={pIdx} style={{ width: colWidth }} className="mr-1 h-14">
-                              <TextInput
-                                ref={el => inputRefs.current[`${rIdx}-${pIdx}`] = el}
-                                keyboardType="numeric"
-                                className="text-center text-[#8B0000] font-bold text-base w-full h-full"
-                                value={isHidden ? '***' : (val === '0' ? '' : val)}
-                                onChangeText={(text) => !isHidden && updateRoundValue(rIdx, pIdx, text)}
-                                placeholder="0"
-                                placeholderTextColor="rgba(17, 17, 17, 0.4)"
-                                selectTextOnFocus
-                                editable={!isHidden}
-                                pointerEvents="none"
-                              />
-                              <TouchableOpacity
-                                className="absolute inset-0"
-                                activeOpacity={1}
-                                onPress={() => inputRefs.current[`${rIdx}-${pIdx}`]?.focus()}
-                              />
-                            </View>
-                          ))}
-                          <View className="w-8" />
-                        </View>
-                      ))}
-                      <View className="h-40" />
-                    </ScrollView>
+                  </ScrollView>
+                ) : (
+                  <View style={{ flex: 1 }}>
+                    <TableBodyComponent
+                      currentSession={currentSession}
+                      totals={totals}
+                      isHidden={isHidden}
+                      indexColWidth={indexColWidth}
+                      colWidth={colWidth}
+                      tableScrollRef={tableScrollRef}
+                      editPlayerName={editPlayerName}
+                      removePlayer={removePlayer}
+                      deleteRound={deleteRound}
+                      updateRoundValue={updateRoundValue}
+                      addRound={addRound}
+                      finalizeRounds={finalizeRounds}
+                      setShowEnd={setShowEnd}
+                      isKeyboardVisible={isKeyboardVisible}
+                      inputRefs={inputRefs}
+                      handleInputSubmit={handleInputSubmit}
+                    />
                   </View>
-                </ScrollView>
-              </KeyboardAvoidingView>
-
-              {/* Bottom Navigation */}
-              <View className="absolute bottom-6 left-5 right-5 h-16 rounded-3xl shadow-xl flex-row overflow-hidden border border-gray-100 bg-white/95">
-                <TouchableOpacity onPress={() => setIsHidden(!isHidden)} className="flex-1 items-center justify-center border-r border-gray-100">
-                  <EyeOff size={22} color={isHidden ? '#ccc' : '#D41F3D'} />
-                  <Text className={`${isHidden ? 'text-gray-400' : 'text-[#D41F3D]'} text-[10px] font-black mt-1 uppercase`}>Ẩn</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={addRound} className="flex-1 items-center justify-center border-r border-gray-100">
-                  <Plus size={24} color="#D41F3D" />
-                  <Text className="text-[#D41F3D] text-[10px] font-black mt-1 uppercase">Thêm</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={finalizeRounds} className="flex-1 items-center justify-center border-r border-gray-100">
-                  <CheckCheck size={22} color="#D41F3D" />
-                  <Text className="text-[#D41F3D] text-[10px] font-black mt-1 uppercase">Chốt số</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setShowEnd(true)} className="flex-1 items-center justify-center">
-                  <Flag size={22} color="#D41F3D" />
-                  <Text className="text-[#D41F3D] text-[10px] font-black mt-1 uppercase">Kết thúc</Text>
-                </TouchableOpacity>
+                )}
               </View>
             </SafeAreaView>
           )}
 
-          {/* Dice Modal Overlay */}
+          {/* Modal Overlays */}
           {showDice && (
             <View className="absolute inset-0 bg-black/70 items-center justify-center z-50">
               <View className="bg-white/90 p-8 rounded-[40px] items-center shadow-2xl w-[90%] border border-white/20">
-                <Text className="text-gray-500 font-bold mb-8 uppercase tracking-widest text-xs">Phần mềm lắc xí ngầu</Text>
+                <Text className="text-gray-500 font-bold mb-8 uppercase tracking-widest text-xs">Dân chơi lắc xí ngầu</Text>
                 <View className="flex-row gap-8 mb-8">
                   <RedDie value={diceValues[0]} />
                   <RedDie value={diceValues[1]} />
                 </View>
                 <View className="items-center">
-                  <Text className="text-gray-400 text-sm font-bold uppercase tracking-widest">Tổng điểm</Text>
+                  <Text className="text-gray-400 text-sm font-bold uppercase tracking-widest">Quá đã dân chơi ơi!</Text>
                   <Text
                     className="text-[#8B0000] text-6xl font-black mt-2"
                     style={{ transform: [{ scale: !isRolling ? 1.1 : 1 }] }}
@@ -835,45 +1045,7 @@ export default function App() {
           )}
 
           {/* Generic Custom Input Modal */}
-          {inputModal.visible && (
-            <View className="absolute inset-0 bg-black/50 items-center justify-center z-[60]">
-              <View className="bg-white p-7 rounded-[40px] w-[88%] shadow-2xl items-center">
-                <View className="bg-orange-50 p-4 rounded-full mb-4">
-                  {inputModal.icon ? React.cloneElement(inputModal.icon, { color: '#D41F3D', size: 32 }) : <Plus size={32} color="#D41F3D" />}
-                </View>
-                <Text className="text-xl font-black mb-2 text-[#8B0000] uppercase tracking-tight">{inputModal.title}</Text>
-                <Text className="text-gray-400 text-center mb-6 font-medium px-2">{inputModal.description}</Text>
-
-                <TextInput
-                  className="w-full bg-gray-50 p-4 rounded-2xl text-lg font-bold text-gray-800 mb-8 border border-gray-100"
-                  placeholder={inputModal.placeholder}
-                  value={inputModal.value}
-                  onChangeText={(text) => setInputModal({ ...inputModal, value: text })}
-                  autoFocus
-                  selectTextOnFocus={true}
-                  clearButtonMode="while-editing"
-                />
-
-                <View className="flex-row w-full gap-3">
-                  <TouchableOpacity
-                    onPress={() => setInputModal({ ...inputModal, visible: false })}
-                    className="flex-1 bg-gray-100 py-4 rounded-2xl items-center"
-                  >
-                    <Text className="text-gray-500 font-bold">Hủy</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => {
-                      inputModal.onConfirm(inputModal.value);
-                      setInputModal({ ...inputModal, visible: false });
-                    }}
-                    className="flex-1 bg-[#D41F3D] py-4 rounded-2xl items-center shadow-lg active:scale-95"
-                  >
-                    <Text className="text-white font-black uppercase">Xác nhận</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          )}
+          <CustomInputModal modal={inputModal} setModal={setInputModal} />
         </LinearGradient>
       </View>
     </SafeAreaProvider>
