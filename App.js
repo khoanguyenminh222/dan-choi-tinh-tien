@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, useWindowDimensions, Share, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, useWindowDimensions, Share, Keyboard, TouchableWithoutFeedback, BackHandler, Image } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import * as SplashScreen from 'expo-splash-screen';
+import PremiumSplash from './components/PremiumSplash';
+
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -217,7 +222,7 @@ const SessionListComponent = React.memo(({ sessions, setCurrentSessionId, editSe
 });
 
 const TableBodyComponent = React.memo(({
-  currentSession, totals, isHidden, indexColWidth, colWidth, tableScrollRef,
+  currentSession, totals, isHidden, setIsHidden, indexColWidth, colWidth, tableScrollRef,
   editPlayerName, removePlayer, deleteRound, updateRoundValue, addRound, finalizeRounds, setShowEnd, isKeyboardVisible, inputRefs, handleInputSubmit
 }) => {
   return (
@@ -307,13 +312,13 @@ const TableBodyComponent = React.memo(({
           </View>
         </View>
 
-        <View className="items-center mt-16 mb-2 opacity-40">
+        <View className="items-center mt-16 mb-40 opacity-40">
           <Text className="text-[#8B0000] text-[12px] font-black uppercase tracking-[3px]">Dân Chơi Tính Tiền</Text>
           <Text className="text-[#8B0000] text-[10px] font-bold uppercase tracking-[2px] mt-0.5 opacity-60">Created by</Text>
           <Text className="text-[#8B0000] text-lg font-black italic mt-1" style={{ letterSpacing: 1 }}>Khoa Ryo</Text>
           <View className="w-12 h-[1px] bg-[#FFD700] mt-2" />
         </View>
-        <View className="h-52" />
+        <View className="h-16" />
       </ScrollView>
 
       {!isKeyboardVisible && (
@@ -378,13 +383,16 @@ const CustomInputModal = React.memo(({ modal, setModal }) => {
   if (!modal.visible) return null;
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View className="absolute inset-0 bg-black/50 items-center justify-center z-[60]">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          className="w-full items-center"
-        >
-          <View className="bg-white p-7 rounded-[40px] w-[88%] shadow-2xl items-center">
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      className="absolute inset-0 z-[60]"
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View className="flex-1 bg-black/50 items-center justify-center">
+          <View
+            className="bg-white p-7 rounded-[40px] w-[88%] shadow-2xl items-center"
+            onStartShouldSetResponder={() => true}
+          >
             <View className="bg-orange-50 p-4 rounded-full mb-4">
               {modal.icon ? React.cloneElement(modal.icon, { color: '#D41F3D', size: 32 }) : <Plus size={32} color="#D41F3D" />}
             </View>
@@ -419,9 +427,9 @@ const CustomInputModal = React.memo(({ modal, setModal }) => {
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
-      </View>
-    </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 });
 
@@ -462,6 +470,7 @@ export default function App() {
   const [sessions, setSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [showPremiumSplash, setShowPremiumSplash] = useState(true);
 
   // Functional States (for TableDetail)
   const [isHidden, setIsHidden] = useState(false);
@@ -521,6 +530,44 @@ export default function App() {
       keyboardDidHideListener.remove();
     };
   }, []);
+
+  // Handle Android Back Button
+  useEffect(() => {
+    const backAction = () => {
+      // 1. Close Input Modal if open
+      if (inputModal.visible) {
+        setInputModal(prev => ({ ...prev, visible: false }));
+        return true;
+      }
+
+      // 2. Close other overhead modals
+      if (showDice) {
+        setShowDice(false);
+        return true;
+      }
+      if (showStats) {
+        setShowStats(false);
+        return true;
+      }
+      if (showEnd) {
+        setShowEnd(false);
+        return true;
+      }
+
+      // 3. Return to Session List if in a session
+      if (currentSessionId) {
+        setCurrentSessionId(null);
+        return true;
+      }
+
+      // 4. Default behavior (exit app)
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+
+    return () => backHandler.remove();
+  }, [inputModal.visible, showDice, showStats, showEnd, currentSessionId]);
   useEffect(() => {
     if (!isLoaded) return;
     const saveData = async () => {
@@ -822,7 +869,10 @@ export default function App() {
     }
   };
 
-  if (!isLoaded) return null;
+  if (showPremiumSplash || !isLoaded) {
+    return <PremiumSplash onFinish={() => setShowPremiumSplash(false)} isDataLoaded={isLoaded} />;
+  }
+
 
   // Table Details Screen logic
   const totals = currentSession ? calculateSessionTotals(currentSession) : [];
@@ -907,6 +957,7 @@ export default function App() {
                         currentSession={currentSession}
                         totals={totals}
                         isHidden={isHidden}
+                        setIsHidden={setIsHidden}
                         indexColWidth={indexColWidth}
                         colWidth={colWidth}
                         tableScrollRef={tableScrollRef}
@@ -929,6 +980,7 @@ export default function App() {
                       currentSession={currentSession}
                       totals={totals}
                       isHidden={isHidden}
+                      setIsHidden={setIsHidden}
                       indexColWidth={indexColWidth}
                       colWidth={colWidth}
                       tableScrollRef={tableScrollRef}
