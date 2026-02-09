@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, useWindowDimensions, Share, Keyboard, TouchableWithoutFeedback, BackHandler, Image } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, useWindowDimensions, Share, Keyboard, BackHandler } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 import PremiumSplash from './components/PremiumSplash';
@@ -9,461 +9,19 @@ SplashScreen.preventAutoHideAsync();
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Plus, EyeOff, Flag, Settings, ChartBar, Dices, ChevronLeft, UserPlus, CheckCheck, Sigma, Share2 } from 'lucide-react-native';
+import { Plus, Settings, ChartBar, Dices, ChevronLeft, UserPlus, Share2, Heart, Flag } from 'lucide-react-native';
 import "./global.css";
 
+import { calculateSessionTotals, calculateAdjustedTotals } from './utils/gameLogic';
+import RedDie from './components/RedDie';
+import GoldCoin from './components/GoldCoin';
+import StaticBackground from './components/StaticBackground';
+import CustomInputModal from './components/CustomInputModal';
+import SessionListComponent from './components/SessionListComponent';
+import TableBodyComponent from './components/TableBodyComponent';
+import DiceModal from './components/DiceModal';
+
 const STORAGE_KEY = '@gamble_tracker_data';
-
-// Helper component for a single die matching the red/gold theme
-const RedDie = ({ value }) => {
-  const renderPips = () => {
-    const pipPositions = {
-      1: [4],
-      2: [2, 6],
-      3: [2, 4, 6],
-      4: [0, 2, 6, 8],
-      5: [0, 2, 4, 6, 8],
-      6: [0, 2, 3, 5, 6, 8],
-    };
-
-    const pips = pipPositions[value] || [];
-    return (
-      <View className="flex-row flex-wrap w-14 h-14 p-1 justify-center items-center">
-        {[...Array(9)].map((_, i) => (
-          <View key={i} className="w-1/3 h-1/3 items-center justify-center">
-            {pips.includes(i) && (
-              <View className="w-3.5 h-3.5 rounded-full bg-white shadow-inner overflow-hidden border border-[#FFD700]/30 font-bold">
-                <LinearGradient
-                  colors={['#FFD700', '#FDB931', '#B8860B']}
-                  className="absolute inset-0"
-                />
-                <View className="absolute top-0 left-0 w-1 h-1 bg-white/40 rounded-full ml-0.5 mt-0.5" />
-              </View>
-            )}
-          </View>
-        ))}
-      </View>
-    );
-  };
-
-  return (
-    <View
-      style={{
-        width: 96,
-        height: 96,
-        borderRadius: 36,
-        backgroundColor: '#D41F3D', // Vital for shadow to follow curve
-        transform: [{ rotate: '4deg' }],
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
-        elevation: 15,
-        overflow: 'visible', // Contain shadow correctly
-      }}
-      className="items-center justify-center"
-    >
-      {/* Clip inner layers */}
-      <View className="absolute inset-0 rounded-[36px] overflow-hidden">
-        {/* Main Body Gradient */}
-        <LinearGradient
-          colors={['#FF3E5E', '#D41F3D', '#8B0000']}
-          className="absolute inset-0"
-          start={{ x: 0.2, y: 0.2 }}
-          end={{ x: 0.8, y: 0.8 }}
-        />
-
-        {/* Highlight Curve */}
-        <View className="absolute top-[3px] left-[3px] right-[5px] bottom-[7px] rounded-[32px] border-t-2 border-l border-white/30" />
-
-        {/* Bottom Shadow depth */}
-        <View className="absolute bottom-[3px] right-[3px] left-[7px] top-[7px] rounded-[32px] border-b-4 border-r-2 border-black/30" />
-
-        {/* Reflection Gloss */}
-        <LinearGradient
-          colors={['rgba(255,255,255,0.2)', 'transparent']}
-          className="absolute top-0 left-0 right-0 h-1/2"
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-        />
-      </View>
-
-      {/* Actual Pips (outside clip for better rendering) */}
-      <View style={{ transform: [{ scale: 1.2 }] }}>
-        {value ? (
-          renderPips()
-        ) : (
-          <Text className="text-white/20 text-5xl font-black italic">?</Text>
-        )}
-      </View>
-    </View>
-  );
-};
-
-// Decorative Gold Coin component
-const GoldCoin = React.memo(({ size = 20, style }) => (
-  <View style={style} pointerEvents="none">
-    <LinearGradient
-      colors={['#FFD700', '#FDB931', '#B8860B']}
-      className="items-center justify-center rounded-full shadow-md"
-      style={{ width: size, height: size, borderWidth: 1, borderColor: '#DAA520' }}
-    >
-      <View className="w-[40%] h-[40%] bg-[#8B0000]/20 rounded-sm" style={{ borderWidth: 1, borderColor: '#DAA520' }} />
-    </LinearGradient>
-  </View>
-));
-
-const RedEnvelope = React.memo(({ size = 30, style }) => (
-  <View style={style} pointerEvents="none">
-    <View
-      className="bg-[#C41E3A] rounded-lg shadow-md items-center justify-center p-1"
-      style={{ width: size, height: size * 1.5, borderWidth: 1, borderColor: '#FFD700' }}
-    >
-      <View className="w-full h-full border border-[#FFD700]/50 items-center justify-center rounded-sm">
-        <Text className="text-[#FFD700] text-[8px] font-black">🧧</Text>
-      </View>
-    </View>
-  </View>
-));
-
-const SessionListComponent = React.memo(({ sessions, setCurrentSessionId, editSessionName, deleteSession, createSession, GoldCoin }) => {
-  return (
-    <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>
-      <View className="px-6 pt-8 pb-4 flex-row justify-between items-center">
-        <View>
-          <Text className="text-[#8B0000] text-3xl font-black tracking-tight">Cái tết ấm no</Text>
-          <Text className="text-[#8B0000]/50 text-sm font-medium mt-1">Chọn hoặc tạo bàn chơi mới</Text>
-        </View>
-        <TouchableOpacity
-          onPress={createSession}
-          className="bg-[#D41F3D] p-3.5 rounded-2xl shadow-lg active:scale-95"
-          style={{ shadowColor: '#D41F3D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}
-        >
-          <Plus size={28} color="white" />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView className="flex-1 px-4 mt-2" showsVerticalScrollIndicator={false}>
-        {sessions.length === 0 ? (
-          <View className="items-center justify-center mt-20 opacity-30">
-            <View className="bg-gray-100 p-8 rounded-full mb-4">
-              <Settings size={60} color="#8B0000" />
-            </View>
-            <Text className="text-[#8B0000] text-lg font-bold">Chưa có bàn nào</Text>
-            <Text className="text-[#8B0000]/60 text-sm">Nhấn dấu + để bắt đầu</Text>
-          </View>
-        ) : (
-          sessions.map((session) => {
-            const totals = calculateSessionTotals(session);
-            const winnerIdx = totals.indexOf(Math.max(...totals));
-
-            return (
-              <TouchableOpacity
-                key={session.id}
-                onPress={() => setCurrentSessionId(session.id)}
-                onLongPress={() => {
-                  Alert.alert('Tùy chọn', 'Bạn muốn làm gì với bàn này?', [
-                    { text: 'Hủy', style: 'cancel' },
-                    { text: 'Đổi tên', onPress: () => editSessionName(session) },
-                    { text: 'Xóa', style: 'destructive', onPress: () => deleteSession(session.id) }
-                  ]);
-                }}
-                className="bg-white p-5 rounded-[32px] mb-4 border border-gray-100 flex-row items-center justify-between shadow-sm"
-              >
-                <View className="flex-1">
-                  <Text className="text-[#8B0000] text-xl font-bold">{session.name}</Text>
-                  <Text className="text-gray-400 text-xs mt-1">
-                    {new Date(session.createdAt).toLocaleDateString('vi-VN')} • {session.players.length} người chơi
-                  </Text>
-
-                  <View className="flex-row mt-3 items-center">
-                    {session.players.slice(0, 3).map((p, i) => (
-                      <View key={i} className="bg-gray-100 px-2.5 py-1 rounded-full mr-1.5">
-                        <Text className="text-gray-600 text-[10px] font-bold">{p}</Text>
-                      </View>
-                    ))}
-                    {session.players.length > 3 && (
-                      <Text className="text-gray-300 text-[10px] ml-1">+{session.players.length - 3}</Text>
-                    )}
-                  </View>
-                </View>
-
-                <View className="flex-row items-center">
-                  <View className="items-end mr-3">
-                    <Text className="text-gray-400 text-[8px] font-black uppercase tracking-widest leading-none mb-0.5">Rich Kid</Text>
-                    <Text className="text-blue-600 text-[11px] font-black uppercase tracking-tight" numberOfLines={1}>
-                      {session.players[winnerIdx]}
-                    </Text>
-                  </View>
-                  {totals[winnerIdx] > 0 && (
-                    <View className="bg-[#FFD700]/30 px-2 py-1.5 rounded-xl border border-[#FFD700]/50 shadow-sm">
-                      <Text className="text-[#8B0000] text-[10px] font-black">🔥 {totals[winnerIdx]}</Text>
-                    </View>
-                  )}
-                </View>
-                {GoldCoin && <GoldCoin size={15} style={{ position: 'absolute', top: -5, right: 10, opacity: 0.6 }} />}
-              </TouchableOpacity>
-            );
-          })
-        )}
-
-        {/* Creator Signature */}
-        <View className="items-center mt-16 mb-8 opacity-30">
-          <Text className="text-[#8B0000] text-[12px] font-black uppercase tracking-[4px]">Dân Chơi Tính Tiền</Text>
-          <Text className="text-[#8B0000] text-[10px] font-bold uppercase tracking-[2px] mt-1 opacity-60">Created by</Text>
-          <Text className="text-[#8B0000] text-2xl font-black italic mt-1" style={{ letterSpacing: 1 }}>Khoa Ryo</Text>
-          <View className="w-16 h-[2px] bg-[#FFD700] mt-3 rounded-full" />
-        </View>
-
-        <View className="h-24" />
-      </ScrollView>
-    </SafeAreaView>
-  );
-});
-
-const TableBodyComponent = React.memo(({
-  currentSession, totals, isHidden, setIsHidden, indexColWidth, colWidth, tableScrollRef,
-  editPlayerName, removePlayer, deleteRound, updateRoundValue, addRound, finalizeRounds, setShowEnd, isKeyboardVisible, inputRefs, handleInputSubmit
-}) => {
-  return (
-    <>
-      <View className="bg-[#FFF8E1] border-b-2 border-[#FFD700] shadow-sm z-10 py-1.5 px-2 mt-2">
-        <View className="flex-row items-center">
-          <View style={{ width: indexColWidth }} className="mr-1 items-center justify-center">
-            <Sigma size={14} color="#8B0000" />
-          </View>
-          {currentSession.players.map((name, idx) => (
-            <View key={idx} style={{ width: colWidth }} className="mr-1 items-center">
-              <TouchableOpacity
-                onPress={() => editPlayerName(idx)}
-                onLongPress={() => removePlayer(idx)}
-                className="w-full items-center mb-1"
-              >
-                <Text className="text-[#8B0000] text-[10px] font-black uppercase tracking-tighter" numberOfLines={1}>{name}</Text>
-              </TouchableOpacity>
-              <Text className={`text-base font-black ${totals[idx] >= 0 ? 'text-blue-800' : 'text-red-700'}`}>
-                {isHidden ? '***' : (totals[idx] > 0 ? `+${totals[idx]}` : totals[idx])}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      <ScrollView
-        ref={tableScrollRef}
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: 50 }}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        nestedScrollEnabled={true}
-      >
-        {currentSession.rounds.map((round, rIdx) => (
-          <View
-            key={rIdx}
-            className={`flex-row items-center py-2.5 px-2 border-b border-white/5 ${rIdx % 2 === 0 ? 'bg-white/5' : ''}`}
-          >
-            <TouchableOpacity
-              onLongPress={() => deleteRound(rIdx)}
-              activeOpacity={0.6}
-              style={{ width: indexColWidth }}
-              className="h-7 items-center justify-center rounded-md mr-1 bg-[#FFD700]/30"
-            >
-              <Text className="text-[#8B0000] text-xs font-black">{rIdx + 1}</Text>
-            </TouchableOpacity>
-
-            {round.map((val, pIdx) => (
-              <View key={pIdx} style={{ width: colWidth }} className="mr-1 h-14">
-                <TextInput
-                  ref={el => inputRefs.current[`${rIdx}-${pIdx}`] = el}
-                  keyboardType="numeric"
-                  className="text-center text-[#8B0000] font-bold text-base w-full h-full"
-                  value={isHidden ? '***' : (val === '0' ? '' : val)}
-                  onChangeText={(text) => !isHidden && updateRoundValue(rIdx, pIdx, text)}
-                  onSubmitEditing={() => handleInputSubmit(rIdx, pIdx)}
-                  returnKeyType={pIdx === currentSession.players.length - 1 ? 'done' : 'next'}
-                  blurOnSubmit={pIdx === currentSession.players.length - 1}
-                  placeholder="0"
-                  placeholderTextColor="rgba(17, 17, 17, 0.4)"
-                  selectTextOnFocus
-                  editable={!isHidden}
-                  pointerEvents="none"
-                />
-                <TouchableOpacity
-                  className="absolute inset-0"
-                  activeOpacity={1}
-                  onPress={() => inputRefs.current[`${rIdx}-${pIdx}`]?.focus()}
-                />
-              </View>
-            ))}
-            <View className="w-8" />
-          </View>
-        ))}
-
-        <View className="flex-row px-2 py-4">
-          <View style={{ width: indexColWidth }} className="items-center justify-center mr-1">
-            <TouchableOpacity
-              onPress={addRound}
-              className="bg-[#FFD700] w-9 h-9 rounded-full items-center justify-center shadow-md active:scale-90"
-              style={{ shadowColor: '#FFD700', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 4 }}
-            >
-              <Plus size={22} color="#8B0000" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View className="items-center mt-16 mb-40 opacity-40">
-          <Text className="text-[#8B0000] text-[12px] font-black uppercase tracking-[3px]">Dân Chơi Tính Tiền</Text>
-          <Text className="text-[#8B0000] text-[10px] font-bold uppercase tracking-[2px] mt-0.5 opacity-60">Created by</Text>
-          <Text className="text-[#8B0000] text-lg font-black italic mt-1" style={{ letterSpacing: 1 }}>Khoa Ryo</Text>
-          <View className="w-12 h-[1px] bg-[#FFD700] mt-2" />
-        </View>
-        <View className="h-16" />
-      </ScrollView>
-
-      {!isKeyboardVisible && (
-        <View className="absolute bottom-6 left-5 right-5 h-16 rounded-3xl shadow-xl flex-row overflow-hidden border border-gray-100 bg-white/95">
-          <TouchableOpacity onPress={() => setIsHidden(!isHidden)} className="flex-1 items-center justify-center border-r border-gray-100">
-            <EyeOff size={22} color={isHidden ? '#ccc' : '#D41F3D'} />
-            <Text className={`${isHidden ? 'text-gray-400' : 'text-[#D41F3D]'} text-[10px] font-black mt-1 uppercase`}>Ẩn</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={addRound} className="flex-1 items-center justify-center border-r border-gray-100">
-            <Plus size={24} color="#D41F3D" />
-            <Text className="text-[#D41F3D] text-[10px] font-black mt-1 uppercase">Thêm</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={finalizeRounds} className="flex-1 items-center justify-center border-r border-gray-100">
-            <CheckCheck size={22} color="#D41F3D" />
-            <Text className="text-[#D41F3D] text-[10px] font-black mt-1 uppercase">Chốt số</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowEnd(true)} className="flex-1 items-center justify-center">
-            <Flag size={22} color="#D41F3D" />
-            <Text className="text-[#D41F3D] text-[10px] font-black mt-1 uppercase">Kết thúc</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </>
-  );
-});
-const BlossomBranch = React.memo(({ type, style }) => {
-  const isPeach = type === 'peach';
-  const petalColor1 = isPeach ? '#FFC0CB' : '#FFFACD';
-  const petalColor2 = isPeach ? '#FF69B4' : '#FFD700';
-
-  return (
-    <View style={style} pointerEvents="none" className="opacity-40">
-      <View
-        className="bg-[#f8e9e5] w-[2px] h-32 absolute rounded-full shadow-sm"
-        style={{ transform: [{ rotate: '45deg' }] }}
-      >
-        {[...Array(6)].map((_, i) => (
-          <View
-            key={i}
-            className="absolute shadow-sm"
-            style={{
-              top: i * 20,
-              left: (i % 2 === 0 ? 4 : -14),
-              transform: [{ rotate: `${i * 30}deg` }]
-            }}
-          >
-            <LinearGradient
-              colors={[petalColor1, petalColor2]}
-              className="w-5 h-5 rounded-full items-center justify-center"
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <View className="w-1 h-1 bg-white/40 rounded-full" />
-            </LinearGradient>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-});
-const CustomInputModal = React.memo(({ modal, setModal }) => {
-  if (!modal.visible) return null;
-
-  return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-      className="absolute inset-0 z-[60]"
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View className="flex-1 bg-black/50 items-center justify-center">
-          <View
-            className="bg-white p-7 rounded-[40px] w-[88%] shadow-2xl items-center"
-            onStartShouldSetResponder={() => true}
-          >
-            <View className="bg-orange-50 p-4 rounded-full mb-4">
-              {modal.icon ? React.cloneElement(modal.icon, { color: '#D41F3D', size: 32 }) : <Plus size={32} color="#D41F3D" />}
-            </View>
-            <Text className="text-xl font-black mb-2 text-[#8B0000] uppercase tracking-tight">{modal.title}</Text>
-            <Text className="text-gray-400 text-center mb-6 font-medium px-2">{modal.description}</Text>
-
-            <TextInput
-              className="w-full bg-gray-50 p-4 rounded-2xl text-lg font-bold text-gray-800 mb-8 border border-gray-100"
-              placeholder={modal.placeholder}
-              value={modal.value}
-              onChangeText={(text) => setModal({ ...modal, value: text })}
-              autoFocus
-              selectTextOnFocus={true}
-              clearButtonMode="while-editing"
-            />
-
-            <View className="flex-row w-full gap-3">
-              <TouchableOpacity
-                onPress={() => setModal({ ...modal, visible: false })}
-                className="flex-1 bg-gray-100 py-4 rounded-2xl items-center"
-              >
-                <Text className="text-gray-500 font-bold">Hủy</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  modal.onConfirm(modal.value);
-                  setModal({ ...modal, visible: false });
-                }}
-                className="flex-1 bg-[#D41F3D] py-4 rounded-2xl items-center shadow-lg active:scale-95"
-              >
-                <Text className="text-white font-black uppercase">Xác nhận</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </TouchableWithoutFeedback>
-    </KeyboardAvoidingView>
-  );
-});
-
-const StaticBackground = React.memo(() => (
-  <>
-    {/* Main Decorative Branches */}
-    <BlossomBranch type="peach" style={{ position: 'absolute', top: -30, right: -40, zIndex: 0, transform: [{ scale: 1.5 }, { rotate: '-15deg' }] }} />
-    <BlossomBranch type="apricot" style={{ position: 'absolute', top: '40%', left: -50, zIndex: 0, transform: [{ scale: 1.2 }, { rotate: '160deg' }] }} />
-
-    {/* Central Background Branches (Low Opacity) */}
-    <BlossomBranch type="peach" style={{ position: 'absolute', top: '25%', right: '15%', zIndex: 0, opacity: 0.15, transform: [{ scale: 1.8 }, { rotate: '10deg' }] }} />
-    <BlossomBranch type="apricot" style={{ position: 'absolute', bottom: '30%', left: '10%', zIndex: 0, opacity: 0.15, transform: [{ scale: 1.6 }, { rotate: '-150deg' }] }} />
-
-    <BlossomBranch type="peach" style={{ position: 'absolute', bottom: -20, right: -30, zIndex: 0, transform: [{ scale: 1.3 }, { rotate: '190deg' }] }} />
-
-    {/* Floating Subtle Elements */}
-    <GoldCoin size={35} style={{ position: 'absolute', top: 120, left: 30, opacity: 0.12, transform: [{ rotate: '15deg' }] }} />
-    <GoldCoin size={25} style={{ position: 'absolute', bottom: 250, right: 40, opacity: 0.1, transform: [{ rotate: '-20deg' }] }} />
-    <RedEnvelope size={40} style={{ position: 'absolute', top: '65%', left: 20, opacity: 0.08, transform: [{ rotate: '-10deg' }] }} />
-    <RedEnvelope size={30} style={{ position: 'absolute', top: 200, right: 30, opacity: 0.06, transform: [{ rotate: '25deg' }] }} />
-  </>
-));
-
-const calculateSessionTotals = (session) => {
-  const totals = session.players.map((_, i) => (session.baseline ? parseFloat(session.baseline[i] || 0) : 0));
-  session.rounds.forEach(round => {
-    round.forEach((val, idx) => {
-      if (idx < totals.length) {
-        totals[idx] += parseFloat(val || 0);
-      }
-    });
-  });
-  return totals;
-};
 
 export default function App() {
   const { width: windowWidth } = useWindowDimensions();
@@ -482,6 +40,7 @@ export default function App() {
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const inputRefs = React.useRef({});
   const tableScrollRef = React.useRef(null);
+  const [isUyenMode, setIsUyenMode] = useState(false); // New state for Uyen Mode
   const [inputModal, setInputModal] = useState({
     visible: false,
     title: '',
@@ -568,6 +127,7 @@ export default function App() {
 
     return () => backHandler.remove();
   }, [inputModal.visible, showDice, showStats, showEnd, currentSessionId]);
+
   useEffect(() => {
     if (!isLoaded) return;
     const saveData = async () => {
@@ -590,9 +150,16 @@ export default function App() {
         if (tableScrollRef.current) {
           tableScrollRef.current.scrollToEnd({ animated: true });
         }
-        // Auto-focus the first input of the new row
+        // Auto-focus the first editable input of the new row (skip dealer)
         const newRowIdx = currentSession.rounds.length - 1;
-        inputRefs.current[`${newRowIdx}-0`]?.focus();
+        let firstEditableIdx = 0;
+
+        // Nếu nhà cái ở vị trí đầu tiên, focus vào ô thứ 2
+        if (currentSession.dealerIndex === 0) {
+          firstEditableIdx = 1;
+        }
+
+        inputRefs.current[`${newRowIdx}-${firstEditableIdx}`]?.focus();
       }, 500); // Reduced delay for better feel
       return () => clearTimeout(timer);
     }
@@ -615,6 +182,7 @@ export default function App() {
           players: ['Người 1', 'Người 2', 'Người 3', 'Người 4'],
           rounds: [['0', '0', '0', '0']],
           baseline: [0, 0, 0, 0], // Store starting/carried over values
+          dealerIndex: null, // Thêm chỉ số nhà cái
           createdAt: new Date().toISOString()
         };
         setSessions([newSession, ...sessions]);
@@ -717,7 +285,8 @@ export default function App() {
             ...currentSession,
             players: [...currentSession.players, name.trim()],
             rounds: currentSession.rounds.map(r => [...r, '0']),
-            baseline: currentSession.baseline ? [...currentSession.baseline, 0] : [0]
+            baseline: currentSession.baseline ? [...currentSession.baseline, 0] : [0],
+            dealerIndex: currentSession.dealerIndex // Giữ nguyên index nhà cái
           };
           updateSession(updated);
         }
@@ -737,6 +306,19 @@ export default function App() {
   const updateRoundValue = (roundIdx, playerIdx, value) => {
     const updatedRounds = [...currentSession.rounds];
     updatedRounds[roundIdx][playerIdx] = value;
+
+    // Tự động tính điểm nhà cái nếu có
+    if (currentSession.dealerIndex !== null) {
+      const dealerIdx = currentSession.dealerIndex;
+      let otherTotal = 0;
+      updatedRounds[roundIdx].forEach((v, idx) => {
+        if (idx !== dealerIdx) {
+          otherTotal += parseFloat(v || 0);
+        }
+      });
+      updatedRounds[roundIdx][dealerIdx] = String(-otherTotal);
+    }
+
     updateSession({ ...currentSession, rounds: updatedRounds });
   };
 
@@ -747,20 +329,40 @@ export default function App() {
       updateRoundValue(rIdx, pIdx, '0');
     }
 
-    // Requirement 1: Jump to next input
-    const nextPIdx = pIdx + 1;
+    // Requirement 1: Jump to next input (skip dealer)
+    let nextPIdx = pIdx + 1;
+
+    // Tìm ô tiếp theo có thể nhập (bỏ qua nhà cái)
+    while (nextPIdx < currentSession.players.length && currentSession.dealerIndex === nextPIdx) {
+      nextPIdx++;
+    }
+
     if (nextPIdx < currentSession.players.length) {
+      // Còn ô trong cùng dòng
       setTimeout(() => {
         inputRefs.current[`${rIdx}-${nextPIdx}`]?.focus();
       }, 100);
     } else if (rIdx === currentSession.rounds.length - 1) {
-      // Last player of the LAST row -> Add new row
-      // The auto-scroll useEffect will handle the focus
+      // Hết dòng cuối -> Thêm dòng mới
       addRound();
+    } else {
+      // Nhảy sang dòng tiếp theo, ô đầu tiên (hoặc bỏ qua nhà cái nếu là ô 0)
+      const nextRowIdx = rIdx + 1;
+      let firstEditableIdx = 0;
+      if (currentSession.dealerIndex === 0) {
+        firstEditableIdx = 1;
+      }
+      setTimeout(() => {
+        inputRefs.current[`${nextRowIdx}-${firstEditableIdx}`]?.focus();
+      }, 100);
     }
   };
 
   const deleteRound = (idx) => {
+    if (idx !== currentSession.rounds.length - 1) {
+      Alert.alert('Không thể xóa', 'Bạn chỉ có thể xóa dòng cuối cùng.');
+      return;
+    }
     Alert.alert('Xóa dòng', 'Bạn có chắc muốn xóa dòng này không?', [
       { text: 'Hủy', style: 'cancel' },
       {
@@ -792,22 +394,50 @@ export default function App() {
   };
 
   const editPlayerName = (idx) => {
-    setInputModal({
-      visible: true,
-      title: 'Đổi tên',
-      description: 'Nhập tên mới cho người chơi này',
-      placeholder: 'Tên người chơi...',
-      value: currentSession.players[idx],
-      type: 'rename-player',
-      onConfirm: (name) => {
-        if (name && name.trim()) {
-          const updatedPlayers = [...currentSession.players];
-          updatedPlayers[idx] = name.trim();
-          updateSession({ ...currentSession, players: updatedPlayers });
+    const isDealer = currentSession.dealerIndex === idx;
+
+    Alert.alert(
+      'Tùy chọn người chơi',
+      `Bạn muốn làm gì với ${currentSession.players[idx]}?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Đổi tên',
+          onPress: () => {
+            setInputModal({
+              visible: true,
+              title: 'Đổi tên',
+              description: 'Nhập tên mới cho người chơi này',
+              placeholder: 'Tên người chơi...',
+              value: currentSession.players[idx],
+              type: 'rename-player',
+              onConfirm: (name) => {
+                if (name && name.trim()) {
+                  const updatedPlayers = [...currentSession.players];
+                  updatedPlayers[idx] = name.trim();
+                  updateSession({ ...currentSession, players: updatedPlayers });
+                }
+              },
+              icon: <Settings size={32} color="#FF6A88" />
+            });
+          }
+        },
+        {
+          text: isDealer ? 'Hủy làm Cái' : 'Chọn làm Cái',
+          onPress: () => toggleDealer(idx)
+        },
+        {
+          text: 'Xóa người chơi',
+          style: 'destructive',
+          onPress: () => removePlayer(idx)
         }
-      },
-      icon: <Settings size={32} color="#FF6A88" />
-    });
+      ]
+    );
+  };
+
+  const toggleDealer = (idx) => {
+    const newDealerIndex = currentSession.dealerIndex === idx ? null : idx;
+    updateSession({ ...currentSession, dealerIndex: newDealerIndex });
   };
 
   const removePlayer = (idx) => {
@@ -854,8 +484,47 @@ export default function App() {
   const shareStandings = async () => {
     try {
       const currentTotals = calculateSessionTotals(currentSession);
+      // 1. Calculate Debt from Uyen (Logic moved to calculateAdjustedTotals)
+      // We need to keep debt calculation here only for MESSAGE generation if needed, 
+      // but calculateAdjustedTotals already returns the final numbers.
+
+      // Re-implementing logic using the helper for consistency
+      const adjustedTotals = calculateAdjustedTotals(currentSession, currentTotals, isUyenMode);
+
+      // Recalculate debt just for the message logic (finding who paid)
+      let debt = 0;
+      if (isUyenMode) {
+        currentSession.players.forEach((p, i) => {
+          if (p.toLowerCase().includes('uyên') && currentTotals[i] < 0) {
+            debt += Math.abs(currentTotals[i]) * 2;
+          }
+        });
+      }
+
       const standings = currentSession.players
-        .map((name, i) => `${name}: ${currentTotals[i] > 0 ? '+' : ''}${currentTotals[i]}`)
+        .map((name, i) => {
+          let score = adjustedTotals[i];
+          let extraMsg = '';
+          const isUyen = name.toLowerCase().includes('uyên');
+          const isKhoa = name.toLowerCase().includes('khoa');
+          const isDealer = i === currentSession.dealerIndex;
+
+          if (isUyenMode) {
+            if (isUyen && currentTotals[i] < 0) {
+              extraMsg = ' (✨ Kích hoạt năng lực ẩn: Người yêu Khoa Ryo ✨)';
+            } else if (debt > 0) {
+              // Check if this person paid the debt
+              let targetIdx = currentSession.players.findIndex(p => p.toLowerCase().includes('khoa'));
+              if (targetIdx === -1) targetIdx = currentSession.dealerIndex;
+
+              if (i === targetIdx) {
+                extraMsg = isKhoa ? ' (Chuyện khó để anh lo 💸)' : ' (Nhà cái chịu trận 💸)';
+              }
+            }
+          }
+
+          return `${name}: ${score > 0 ? '+' : ''}${score}${extraMsg}`;
+        })
         .join('\n');
 
       const message = `🧧 Bảng Điểm - ${currentSession.name} 🧧\n\n${standings}\n\nChúc mừng năm mới! 🎉`;
@@ -955,7 +624,7 @@ export default function App() {
                     <View style={{ width: 'auto', flex: 1 }}>
                       <TableBodyComponent
                         currentSession={currentSession}
-                        totals={totals}
+                        totals={calculateAdjustedTotals(currentSession, totals, isUyenMode)}
                         isHidden={isHidden}
                         setIsHidden={setIsHidden}
                         indexColWidth={indexColWidth}
@@ -971,6 +640,8 @@ export default function App() {
                         isKeyboardVisible={isKeyboardVisible}
                         inputRefs={inputRefs}
                         handleInputSubmit={handleInputSubmit}
+                        isUyenMode={isUyenMode}
+                        setIsUyenMode={setIsUyenMode}
                       />
                     </View>
                   </ScrollView>
@@ -978,7 +649,7 @@ export default function App() {
                   <View style={{ flex: 1 }}>
                     <TableBodyComponent
                       currentSession={currentSession}
-                      totals={totals}
+                      totals={calculateAdjustedTotals(currentSession, totals, isUyenMode)}
                       isHidden={isHidden}
                       setIsHidden={setIsHidden}
                       indexColWidth={indexColWidth}
@@ -994,6 +665,8 @@ export default function App() {
                       isKeyboardVisible={isKeyboardVisible}
                       inputRefs={inputRefs}
                       handleInputSubmit={handleInputSubmit}
+                      isUyenMode={isUyenMode}
+                      setIsUyenMode={setIsUyenMode}
                     />
                   </View>
                 )}
@@ -1002,56 +675,84 @@ export default function App() {
           )}
 
           {/* Modal Overlays */}
-          {showDice && (
-            <View className="absolute inset-0 bg-black/70 items-center justify-center z-50">
-              <View className="bg-white/90 p-8 rounded-[40px] items-center shadow-2xl w-[90%] border border-white/20">
-                <Text className="text-gray-500 font-bold mb-8 uppercase tracking-widest text-xs">Dân chơi lắc xí ngầu</Text>
-                <View className="flex-row gap-8 mb-8">
-                  <RedDie value={diceValues[0]} />
-                  <RedDie value={diceValues[1]} />
-                </View>
-                <View className="items-center">
-                  <Text className="text-gray-400 text-sm font-bold uppercase tracking-widest">Quá đã dân chơi ơi!</Text>
-                  <Text
-                    className="text-[#8B0000] text-6xl font-black mt-2"
-                    style={{ transform: [{ scale: !isRolling ? 1.1 : 1 }] }}
-                  >
-                    {!isRolling ? diceValues[0] + diceValues[1] : '...'}
-                  </Text>
-                </View>
-                {!isRolling && (
-                  <View className="mt-10 flex-row gap-4">
-                    <TouchableOpacity onPress={rollDice} className="bg-gray-100 px-8 py-4 rounded-2xl active:scale-95">
-                      <Text className="text-gray-600 font-bold text-lg">Lắc lại</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => setShowDice(false)}
-                      className="overflow-hidden rounded-2xl shadow-lg active:scale-95"
-                    >
-                      <LinearGradient colors={['#E52B50', '#C41E3A']} className="px-12 py-4">
-                        <Text className="text-white font-black text-lg uppercase">Đóng</Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            </View>
-          )}
+          <DiceModal
+            visible={showDice}
+            onClose={() => setShowDice(false)}
+            diceValues={diceValues}
+            isRolling={isRolling}
+            rollDice={rollDice}
+            RedDie={RedDie}
+          />
 
           {/* Stats Modal Overlay */}
           {showStats && (
             <View className="absolute inset-0 bg-black/50 items-center justify-center z-50">
-              <View className="bg-white p-7 rounded-[40px] w-[88%] shadow-2xl">
-                <Text className="text-[#8B0000] text-2xl font-black mb-6 text-center uppercase tracking-tight">Thống Kê</Text>
+              <View className="bg-white p-7 rounded-[40px] w-[88%] shadow-2xl relative">
+                {currentSession.players.some((p, i) => p.toLowerCase().includes('uyên') && totals[i] < 0) && (
+                  <TouchableOpacity
+                    onPress={() => setIsUyenMode(!isUyenMode)}
+                    className={`absolute top-6 right-6 z-10 flex-row items-center px-3 py-1.5 rounded-full border ${isUyenMode ? 'bg-pink-50 border-pink-200' : 'bg-gray-50 border-gray-200'}`}
+                  >
+                    <Text className={`mr-1.5 text-[10px] font-bold uppercase ${isUyenMode ? 'text-pink-500' : 'text-gray-400'}`}>
+                      {isUyenMode ? 'Uyên Mode' : 'Uyên Mode'}
+                    </Text>
+                    <Heart
+                      size={14}
+                      fill={isUyenMode ? "#FF69B4" : "transparent"}
+                      color={isUyenMode ? "#FF69B4" : "#ccc"}
+                    />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => setIsUyenMode(!isUyenMode)} activeOpacity={1}>
+                  <Text className="text-[#8B0000] text-2xl font-black mb-6 text-center uppercase tracking-tight">Thống Kê</Text>
+                </TouchableOpacity>
                 <View className="mb-8">
-                  {currentSession.players.map((name, idx) => (
-                    <View key={idx} className="flex-row justify-between py-3.5 border-b border-gray-50">
-                      <Text className="text-gray-600 font-bold text-base">{name}</Text>
-                      <Text className={`font-black text-lg ${totals[idx] >= 0 ? 'text-blue-600' : 'text-red-500'}`}>
-                        {totals[idx] > 0 ? '+' : ''}{totals[idx]}
-                      </Text>
-                    </View>
-                  ))}
+                  {currentSession.players.map((name, idx) => {
+                    let finalScore = totals[idx];
+                    let showHiddenMsg = false;
+                    let showDebtMsg = '';
+
+                    if (isUyenMode) {
+                      // 1. Calculate Debt
+                      let debt = 0;
+                      currentSession.players.forEach((p, i) => {
+                        if (p.toLowerCase().includes('uyên') && totals[i] < 0) {
+                          debt += Math.abs(totals[i]) * 2;
+                        }
+                      });
+
+                      // 2. Determine who pays
+                      let payerIdx = currentSession.players.findIndex(p => p.toLowerCase().includes('khoa'));
+                      if (payerIdx === -1) payerIdx = currentSession.dealerIndex;
+
+                      // 3. Apply changes
+                      if (name.toLowerCase().includes('uyên') && totals[idx] < 0) {
+                        finalScore = Math.abs(finalScore);
+                        showHiddenMsg = true;
+                      } else if (idx === payerIdx && debt > 0) {
+                        finalScore -= debt;
+                        showDebtMsg = name.toLowerCase().includes('khoa') ? '(Chuyện khó để anh lo 💸)' : '(Nhà cái chịu trận 💸)';
+                      }
+                    }
+
+                    return (
+                      <View key={idx} className="py-3.5 border-b border-gray-50">
+                        <View className="flex-row justify-between items-center">
+                          <Text className="text-gray-600 font-bold text-base">
+                            {name} {showDebtMsg ? <Text className="text-[10px] text-red-500 font-normal">{showDebtMsg}</Text> : null}
+                          </Text>
+                          <Text className={`font-black text-lg ${finalScore >= 0 ? 'text-blue-600' : 'text-red-500'}`}>
+                            {finalScore > 0 ? '+' : ''}{finalScore}
+                          </Text>
+                        </View>
+                        {showHiddenMsg && (
+                          <Text className="text-[#FF69B4] text-[10px] font-bold italic mt-1 text-right">
+                            ✨ Kích hoạt năng lực ẩn: Người yêu Khoa Ryo ✨
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  })}
                 </View>
                 <View className="flex-row w-full gap-3">
                   <TouchableOpacity
@@ -1094,6 +795,20 @@ export default function App() {
                 </View>
               </View>
             </View>
+          )}
+
+          {/* Floating Uyen Mode Badge */}
+          {currentSessionId && currentSession?.players?.some((p, i) => p.toLowerCase().includes('uyên') && (totals[i] < 0 || isUyenMode)) && !isKeyboardVisible && (
+            <TouchableOpacity
+              onPress={() => setIsUyenMode(!isUyenMode)}
+              className={`absolute bottom-24 right-5 px-4 py-2 rounded-full shadow-2xl flex-row items-center z-40 ${isUyenMode ? 'bg-pink-100 border-2 border-pink-300' : 'bg-white/95 border border-gray-200'}`}
+              activeOpacity={0.7}
+            >
+              <Heart size={14} color={isUyenMode ? "#FF69B4" : "#ccc"} fill={isUyenMode ? "#FF69B4" : "transparent"} />
+              <Text className={`ml-2 text-[11px] font-black uppercase ${isUyenMode ? 'text-pink-500' : 'text-gray-400'}`}>
+                Uyên Mode
+              </Text>
+            </TouchableOpacity>
           )}
 
           {/* Generic Custom Input Modal */}
