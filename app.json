@@ -13,7 +13,11 @@
       "backgroundColor": "#000000"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gamefunny.danchoitinhtien",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,22 +25,22 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.khoa123.danchoitinhtien"
+      "package": "com.gamefunny.danchoitinhtien"
     },
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
-    "extra": {
-      "eas": {
-        "projectId": "0f94ea47-9560-409c-905b-b94ae8b12233"
-      }
-    },
     "runtimeVersion": {
       "policy": "appVersion"
     },
+    "extra": {
+      "eas": {
+        "projectId": "75cda2fe-d415-44f8-9cfd-dfbdfc76c0fb"
+      }
+    },
     "updates": {
-      "url": "https://u.expo.dev/0f94ea47-9560-409c-905b-b94ae8b12233"
+      "url": "https://u.expo.dev/75cda2fe-d415-44f8-9cfd-dfbdfc76c0fb"
     }
   }
 }

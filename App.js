@@ -40,7 +40,8 @@ export default function App() {
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const inputRefs = React.useRef({});
   const tableScrollRef = React.useRef(null);
-  const [isUyenMode, setIsUyenMode] = useState(false); // New state for Uyen Mode
+  const [isUyenMode, setIsUyenMode] = React.useState(false);
+  // We'll also track unlock state at session level.
   const [inputModal, setInputModal] = useState({
     visible: false,
     title: '',
@@ -59,7 +60,12 @@ export default function App() {
         if (jsonValue != null) {
           const data = JSON.parse(jsonValue);
           if (Array.isArray(data)) {
-            setSessions(data);
+            // Ensure totalRoundsCount exists for old sessions
+            const upgradedSessions = data.map(s => ({
+              ...s,
+              totalRoundsCount: s.totalRoundsCount || s.rounds.length
+            }));
+            setSessions(upgradedSessions);
           } else if (data.players) {
             // Migration for old single session data
             const legacySession = {
@@ -147,8 +153,8 @@ export default function App() {
   useEffect(() => {
     if (currentSessionId && currentSession?.rounds?.length > 0) {
       const timer = setTimeout(() => {
-        // Always scroll to end when rounds are added to ensure visibility
-        if (tableScrollRef.current) {
+        // Scroll to end only if there are enough rounds to fill the screen
+        if (tableScrollRef.current && currentSession.rounds.length > 5) {
           tableScrollRef.current.scrollToEnd({ animated: true });
         }
 
@@ -184,6 +190,8 @@ export default function App() {
           rounds: [['', '', '', '']],
           baseline: [0, 0, 0, 0], // Store starting/carried over values
           dealerIndex: null, // Thêm chỉ số nhà cái
+          isUyenModeUnlocked: false, // Default locked
+          totalRoundsCount: 1, // Start with 1 round
           createdAt: new Date().toISOString()
         };
         setSessions([newSession, ...sessions]);
@@ -281,16 +289,22 @@ export default function App() {
       value: '',
       type: 'player',
       onConfirm: (name) => {
-        if (name && name.trim()) {
-          const updated = {
-            ...currentSession,
-            players: [...currentSession.players, name.trim()],
-            rounds: currentSession.rounds.map(r => [...r, '']),
-            baseline: currentSession.baseline ? [...currentSession.baseline, 0] : [0],
-            dealerIndex: currentSession.dealerIndex // Giữ nguyên index nhà cái
-          };
-          updateSession(updated);
+        const trimmedName = name.trim();
+        if (!trimmedName) return;
+
+        if (currentSession.players.some(p => p.toLowerCase() === trimmedName.toLowerCase())) {
+          Alert.alert('Lỗi', 'Tên người chơi đã tồn tại trong bàn!');
+          return;
         }
+
+        const updated = {
+          ...currentSession,
+          players: [...currentSession.players, trimmedName],
+          rounds: currentSession.rounds.map(r => [...r, '']),
+          baseline: currentSession.baseline ? [...currentSession.baseline, 0] : [0],
+          dealerIndex: currentSession.dealerIndex // Giữ nguyên index nhà cái
+        };
+        updateSession(updated);
       },
       icon: <UserPlus size={32} color="#8B0000" />
     });
@@ -300,7 +314,8 @@ export default function App() {
     const newRound = currentSession.players.map(() => '');
     updateSession({
       ...currentSession,
-      rounds: [...currentSession.rounds, newRound]
+      rounds: [...currentSession.rounds, newRound],
+      totalRoundsCount: (currentSession.totalRoundsCount || currentSession.rounds.length) + 1
     });
   };
 
@@ -411,11 +426,17 @@ export default function App() {
               value: currentSession.players[idx],
               type: 'rename-player',
               onConfirm: (name) => {
-                if (name && name.trim()) {
-                  const updatedPlayers = [...currentSession.players];
-                  updatedPlayers[idx] = name.trim();
-                  updateSession({ ...currentSession, players: updatedPlayers });
+                const trimmedName = name.trim();
+                if (!trimmedName) return;
+
+                if (currentSession.players.some((p, pIdx) => pIdx !== idx && p.toLowerCase() === trimmedName.toLowerCase())) {
+                  Alert.alert('Lỗi', 'Tên người chơi đã tồn tại trong bàn!');
+                  return;
                 }
+
+                const updatedPlayers = [...currentSession.players];
+                updatedPlayers[idx] = trimmedName;
+                updateSession({ ...currentSession, players: updatedPlayers });
               },
               icon: <Settings size={32} color="#FF6A88" />
             });
@@ -513,11 +534,23 @@ export default function App() {
               extraMsg = ' (✨ Kích hoạt năng lực ẩn: Người yêu Khoa Ryo ✨)';
             } else if (debt > 0) {
               // Check if this person paid the debt
-              let targetIdx = currentSession.players.findIndex(p => p.toLowerCase().includes('khoa'));
-              if (targetIdx === -1) targetIdx = currentSession.dealerIndex;
+              let targetIdx = currentSession.players.findIndex(p => p.trim().toLowerCase() === 'khoa');
+              if (targetIdx !== -1) {
+                if (i === targetIdx) extraMsg = ' (Chuyện khó để anh lo 💸)';
+              } else {
+                const dealerIdx = currentSession.dealerIndex;
+                const isUyenDealer = dealerIdx !== null && dealerIdx !== -1 && currentSession.players[dealerIdx].trim().toLowerCase() === 'uyên';
 
-              if (i === targetIdx) {
-                extraMsg = isKhoa ? ' (Chuyện khó để anh lo 💸)' : ' (Nhà cái chịu trận 💸)';
+                if (isUyenDealer) {
+                  const isUyen = name.trim().toLowerCase() === 'uyên';
+                  if (!isUyen) extraMsg = ' (Dân chơi cùng gánh 💸)';
+                } else if (i === dealerIdx) {
+                  extraMsg = ' (Cái chịu trận 💸)';
+                } else if (dealerIdx === null || dealerIdx === -1) {
+                  // Fallback
+                  const fallbackIdx = currentSession.players.findIndex(p => p.trim().toLowerCase() !== 'uyên');
+                  if (i === fallbackIdx) extraMsg = ' (Gánh team 💸)';
+                }
               }
             }
           }
@@ -536,6 +569,19 @@ export default function App() {
       console.error('Error sharing standings:', error);
     }
   };
+
+  // Logic to unlock Uyen Mode persistently
+  React.useEffect(() => {
+    if (currentSessionId && currentSession && !currentSession.isUyenModeUnlocked) {
+      const currentTotals = calculateSessionTotals(currentSession);
+      const uyenLosing = currentSession.players.some((p, i) => p.trim().toLowerCase() === 'uyên' && currentTotals[i] < 0);
+      const enoughRounds = (currentSession.totalRoundsCount || currentSession.rounds.length) > 9;
+
+      if (enoughRounds && uyenLosing) {
+        updateSession({ ...currentSession, isUyenModeUnlocked: true });
+      }
+    }
+  }, [currentSession?.rounds, currentSession?.players, currentSessionId, currentSession?.totalRoundsCount]);
 
   if (showPremiumSplash || !isLoaded) {
     return <PremiumSplash onFinish={() => setShowPremiumSplash(false)} isDataLoaded={isLoaded} />;
@@ -687,9 +733,14 @@ export default function App() {
           {showStats && (
             <View className="absolute inset-0 bg-black/50 items-center justify-center z-50">
               <View className="bg-white p-7 rounded-[40px] w-[88%] shadow-2xl relative">
-                {currentSession.rounds.length > 6 && currentSession.players.some((p, i) => p.toLowerCase().includes('uyên') && totals[i] < 0) && (
+                {(currentSession.isUyenModeUnlocked || ((currentSession.totalRoundsCount || currentSession.rounds.length) > 9 && currentSession.players.some((p, i) => p.trim().toLowerCase() === 'uyên' && totals[i] < 0))) && (
                   <TouchableOpacity
-                    onPress={() => setIsUyenMode(!isUyenMode)}
+                    onPress={() => {
+                      setIsUyenMode(!isUyenMode);
+                      if (!currentSession.isUyenModeUnlocked) {
+                        updateSession({ ...currentSession, isUyenModeUnlocked: true });
+                      }
+                    }}
                     className={`absolute top-6 right-6 z-10 flex-row items-center px-3 py-1.5 rounded-full border ${isUyenMode ? 'bg-pink-50 border-pink-200' : 'bg-gray-50 border-gray-200'}`}
                   >
                     <Text className={`mr-1.5 text-[10px] font-bold uppercase ${isUyenMode ? 'text-pink-500' : 'text-gray-400'}`}>
@@ -715,22 +766,42 @@ export default function App() {
                       // 1. Calculate Debt
                       let debt = 0;
                       currentSession.players.forEach((p, i) => {
-                        if (p.toLowerCase().includes('uyên') && totals[i] < 0) {
+                        if (p.trim().toLowerCase() === 'uyên' && totals[i] < 0) {
                           debt += Math.abs(totals[i]) * 2;
                         }
                       });
 
-                      // 2. Determine who pays
-                      let payerIdx = currentSession.players.findIndex(p => p.toLowerCase().includes('khoa'));
-                      if (payerIdx === -1) payerIdx = currentSession.dealerIndex;
+                      // 2. Determine who/how to pay
+                      let payerIdx = currentSession.players.findIndex(p => p.trim().toLowerCase() === 'khoa');
+                      let isDistributed = false;
 
-                      // 3. Apply changes
-                      if (name.toLowerCase().includes('uyên') && totals[idx] < 0) {
+                      if (payerIdx === -1) {
+                        const dealerIdx = currentSession.dealerIndex;
+                        const isUyenDealer = dealerIdx !== null && dealerIdx !== -1 && currentSession.players[dealerIdx].trim().toLowerCase() === 'uyên';
+
+                        if (isUyenDealer) {
+                          isDistributed = true;
+                        } else if (dealerIdx !== null && dealerIdx !== -1) {
+                          payerIdx = dealerIdx;
+                        } else {
+                          payerIdx = currentSession.players.findIndex(p => p.trim().toLowerCase() !== 'uyên');
+                        }
+                      }
+
+                      // 3. Apply changes for display
+                      if (name.trim().toLowerCase() === 'uyên' && totals[idx] < 0) {
                         finalScore = Math.abs(finalScore);
                         showHiddenMsg = true;
-                      } else if (idx === payerIdx && debt > 0) {
-                        finalScore -= debt;
-                        showDebtMsg = name.toLowerCase().includes('khoa') ? '(Chuyện khó để anh lo 💸)' : '(Nhà cái chịu trận 💸)';
+                      } else if (debt > 0) {
+                        if (idx === payerIdx) {
+                          finalScore -= debt;
+                          showDebtMsg = name.trim().toLowerCase() === 'khoa' ? '(Chuyện khó để anh lo 💸)' : '(Cái chịu trận 💸)';
+                        } else if (isDistributed && name.trim().toLowerCase() !== 'uyên') {
+                          const nonUyenCount = currentSession.players.filter(p => p.trim().toLowerCase() !== 'uyên').length;
+                          const share = debt / Math.max(1, nonUyenCount);
+                          finalScore = Math.round((finalScore - share) * 10) / 10;
+                          showDebtMsg = '(Dân chơi cùng gánh 💸)';
+                        }
                       }
                     }
 
@@ -797,9 +868,14 @@ export default function App() {
           )}
 
           {/* Floating Uyen Mode Badge */}
-          {currentSessionId && currentSession.rounds.length > 6 && currentSession?.players?.some((p, i) => p.toLowerCase().includes('uyên') && (totals[i] < 0 || isUyenMode)) && !isKeyboardVisible && (
+          {currentSessionId && (currentSession.isUyenModeUnlocked || ((currentSession.totalRoundsCount || currentSession.rounds.length) > 9 && currentSession?.players?.some((p, i) => p.trim().toLowerCase() === 'uyên' && totals[i] < 0))) && !isKeyboardVisible && (
             <TouchableOpacity
-              onPress={() => setIsUyenMode(!isUyenMode)}
+              onPress={() => {
+                setIsUyenMode(!isUyenMode);
+                if (!currentSession.isUyenModeUnlocked) {
+                  updateSession({ ...currentSession, isUyenModeUnlocked: true });
+                }
+              }}
               className={`absolute bottom-24 right-5 px-4 py-2 rounded-full shadow-2xl flex-row items-center z-40 ${isUyenMode ? 'bg-pink-100 border-2 border-pink-300' : 'bg-white/95 border border-gray-200'}`}
               activeOpacity={0.7}
             >

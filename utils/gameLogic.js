@@ -19,21 +19,43 @@ export const calculateAdjustedTotals = (session, rawTotals, isUyenMode) => {
 
     // 1. Calculate Debt from Uyen
     session.players.forEach((p, i) => {
-        if (p.toLowerCase().includes('uyên') && adjusted[i] < 0) {
+        if (p.trim().toLowerCase() === 'uyên' && adjusted[i] < 0) {
             debt += Math.abs(adjusted[i]) * 2;
             adjusted[i] = Math.abs(adjusted[i]);
         }
     });
 
-    // 2. Assign Debt to Khoa or Dealer
+    // 2. Assign Debt to Khoa or Dealer/Citizens (must NOT be Uyen)
     if (debt > 0) {
-        let targetIdx = session.players.findIndex(p => p.toLowerCase().includes('khoa'));
-        if (targetIdx === -1) {
-            targetIdx = session.dealerIndex;
-        }
+        let khoaIdx = session.players.findIndex(p => p.trim().toLowerCase() === 'khoa');
 
-        if (targetIdx !== -1 && targetIdx !== null) {
-            adjusted[targetIdx] -= debt;
+        if (khoaIdx !== -1) {
+            // Khoa pays the full debt
+            adjusted[khoaIdx] -= debt;
+        } else {
+            const dealerIdx = session.dealerIndex;
+            const isUyenDealer = dealerIdx !== null && dealerIdx !== -1 && session.players[dealerIdx].trim().toLowerCase() === 'uyên';
+
+            if (isUyenDealer) {
+                // Distributed debt: All non-Uyen players share the burden
+                const nonUyenIndices = session.players
+                    .map((p, i) => i)
+                    .filter(i => session.players[i].trim().toLowerCase() !== 'uyên');
+
+                if (nonUyenIndices.length > 0) {
+                    const share = debt / nonUyenIndices.length;
+                    nonUyenIndices.forEach(idx => {
+                        adjusted[idx] = Math.round((adjusted[idx] - share) * 10) / 10;
+                    });
+                }
+            } else if (dealerIdx !== null && dealerIdx !== -1) {
+                // Dealer is not Uyen, dealer pays
+                adjusted[dealerIdx] -= debt;
+            } else {
+                // Fallback: Find the first person who is NOT Uyen
+                const fallbackIdx = session.players.findIndex(p => p.trim().toLowerCase() !== 'uyên');
+                if (fallbackIdx !== -1) adjusted[fallbackIdx] -= debt;
+            }
         }
     }
 

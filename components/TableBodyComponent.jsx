@@ -115,7 +115,7 @@ const TableRow = React.memo(
         className={`flex-row items-center py-2.5 px-2 border-b border-white/5 ${rIdx % 2 === 0 ? "bg-white/5" : ""}`}
       >
         <TouchableOpacity
-          onLongPress={() => deleteRound(rIdx)}
+          onPress={() => deleteRound(rIdx)}
           activeOpacity={0.6}
           style={{ width: indexColWidth }}
           className="h-7 items-center justify-center rounded-md mr-1 bg-[#FFD700]/30"
@@ -247,7 +247,7 @@ const TableBodyComponent = React.memo(
             </View>
           </View>
 
-          <View className="items-center mt-16 mb-40 opacity-40">
+          <View className="items-center mt-2 mb-20 opacity-40">
             <Text className="text-[#8B0000] text-[12px] font-black uppercase tracking-[3px]">
               Dân Chơi Tính Tiền
             </Text>
