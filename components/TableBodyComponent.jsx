@@ -6,14 +6,163 @@ import {
   TextInput,
   TouchableOpacity,
 } from "react-native";
-import {
-  Plus,
-  EyeOff,
-  Flag,
-  CheckCheck,
-  Sigma,
-  Heart,
-} from "lucide-react-native";
+import { Plus, EyeOff, Flag, CheckCheck, Sigma } from "lucide-react-native";
+
+const TableHeader = React.memo(
+  ({
+    players,
+    totals,
+    dealerIndex,
+    colWidth,
+    indexColWidth,
+    isHidden,
+    editPlayerName,
+  }) => {
+    return (
+      <View className="bg-[#FFF8E1] border-b-2 border-[#FFD700] shadow-sm z-10 py-1.5 px-2 mt-2">
+        <View className="flex-row items-center">
+          <View
+            style={{ width: indexColWidth }}
+            className="mr-1 items-center justify-center"
+          >
+            <Sigma size={14} color="#8B0000" />
+          </View>
+          {players.map((name, idx) => {
+            const maxTotal = Math.max(...totals);
+            const isWinner = totals[idx] === maxTotal && maxTotal > 0;
+
+            return (
+              <View
+                key={idx}
+                style={{ width: colWidth, minHeight: 52 }}
+                className="mr-1 items-center justify-end"
+              >
+                <View
+                  style={{
+                    height: 20, // Fixed height for crown/dealer area
+                    justifyContent: "flex-end",
+                    alignItems: "center",
+                    marginBottom: 2,
+                  }}
+                >
+                  {isWinner && (
+                    <Text style={{ fontSize: 16, lineHeight: 20 }}>👑</Text>
+                  )}
+                  {dealerIndex === idx && (
+                    <Text
+                      className="text-[#D41F3D] text-[7px] font-black uppercase"
+                      style={{ letterSpacing: 0.5, lineHeight: 8 }}
+                    >
+                      NHÀ CÁI
+                    </Text>
+                  )}
+                  {!isWinner && dealerIndex !== idx && (
+                    <Text
+                      className="text-gray-300 text-[9px] font-black uppercase"
+                      style={{ letterSpacing: 0.5 }}
+                    >
+                      DÂN CHƠI
+                    </Text>
+                  )}
+                </View>
+                <TouchableOpacity
+                  onPress={() => editPlayerName(idx)}
+                  onLongPress={() => editPlayerName(idx)}
+                  className="w-full items-center mb-1"
+                >
+                  <Text
+                    className="text-[#8B0000] text-[10px] font-black uppercase tracking-tighter"
+                    numberOfLines={1}
+                  >
+                    {name}
+                  </Text>
+                </TouchableOpacity>
+                <Text
+                  className={`text-base font-black ${totals[idx] >= 0 ? "text-blue-800" : "text-red-700"}`}
+                >
+                  {isHidden
+                    ? "***"
+                    : totals[idx] > 0
+                      ? `+${totals[idx]}`
+                      : totals[idx]}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  },
+);
+
+const TableRow = React.memo(
+  ({
+    round,
+    rIdx,
+    dealerIndex,
+    colWidth,
+    indexColWidth,
+    inputRefs,
+    isHidden,
+    updateRoundValue,
+    handleInputSubmit,
+    deleteRound,
+    isLastRow,
+    playerCount,
+  }) => {
+    return (
+      <View
+        className={`flex-row items-center py-2.5 px-2 border-b border-white/5 ${rIdx % 2 === 0 ? "bg-white/5" : ""}`}
+      >
+        <TouchableOpacity
+          onLongPress={() => deleteRound(rIdx)}
+          activeOpacity={0.6}
+          style={{ width: indexColWidth }}
+          className="h-7 items-center justify-center rounded-md mr-1 bg-[#FFD700]/30"
+        >
+          <Text className="text-[#8B0000] text-xs font-black">{rIdx + 1}</Text>
+        </TouchableOpacity>
+
+        {round.map((val, pIdx) => {
+          const numVal = parseFloat(val || 0);
+          const isDealer = dealerIndex === pIdx;
+          let textColor = "text-[#8B0000]";
+
+          if (numVal > 0) {
+            textColor = "text-blue-600";
+          } else if (numVal < 0) {
+            textColor = "text-red-600";
+          } else if (isDealer) {
+            textColor = "text-[#D41F3D]";
+          }
+
+          return (
+            <View key={pIdx} style={{ width: colWidth }} className="mr-1 h-14">
+              <TextInput
+                ref={(el) => (inputRefs.current[`${rIdx}-${pIdx}`] = el)}
+                keyboardType="numeric"
+                className={`text-center font-bold text-base w-full h-full ${textColor}`}
+                value={isHidden ? "***" : val}
+                onChangeText={(text) =>
+                  !isHidden && updateRoundValue(rIdx, pIdx, text)
+                }
+                onSubmitEditing={() => handleInputSubmit(rIdx, pIdx)}
+                returnKeyType={pIdx === playerCount - 1 ? "done" : "next"}
+                blurOnSubmit={pIdx === playerCount - 1}
+                placeholder="0"
+                placeholderTextColor="rgba(17, 17, 17, 0.4)"
+                selectTextOnFocus={true}
+                editable={!isHidden && !isDealer && isLastRow}
+                pointerEvents={isDealer || !isLastRow ? "none" : "auto"}
+              />
+            </View>
+          );
+        })}
+        <View className="w-8" />
+      </View>
+    );
+  },
+);
 
 const TableBodyComponent = React.memo(
   ({
@@ -39,168 +188,43 @@ const TableBodyComponent = React.memo(
   }) => {
     return (
       <>
-        <View className="bg-[#FFF8E1] border-b-2 border-[#FFD700] shadow-sm z-10 py-1.5 px-2 mt-2">
-          <View className="flex-row items-center">
-            <View
-              style={{ width: indexColWidth }}
-              className="mr-1 items-center justify-center"
-            >
-              <Sigma size={14} color="#8B0000" />
-            </View>
-            {currentSession.players.map((name, idx) => {
-              const maxTotal = Math.max(...totals);
-              const isWinner = totals[idx] === maxTotal && maxTotal > 0;
-
-              return (
-                <View
-                  key={idx}
-                  style={{ width: colWidth, minHeight: 52 }}
-                  className="mr-1 items-center justify-end"
-                >
-                  <View
-                    style={{
-                      minHeight: 18,
-                      justifyContent: "flex-end",
-                      alignItems: "center",
-                      marginBottom: 2,
-                    }}
-                  >
-                    {isWinner && (
-                      <Text style={{ fontSize: 16, lineHeight: 18 }}>👑</Text>
-                    )}
-                    {currentSession.dealerIndex === idx && (
-                      <Text
-                        className="text-[#D41F3D] text-[7px] font-black uppercase"
-                        style={{ letterSpacing: 0.5, lineHeight: 8 }}
-                      >
-                        NHÀ CÁI
-                      </Text>
-                    )}
-                    {!isWinner && currentSession.dealerIndex !== idx && (
-                      <Text
-                        className="text-gray-300 text-[9px] font-black uppercase"
-                        style={{ letterSpacing: 0.5 }}
-                      >
-                        DÂN CHƠI
-                      </Text>
-                    )}
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => editPlayerName(idx)}
-                    onLongPress={() => editPlayerName(idx)}
-                    className="w-full items-center mb-1"
-                  >
-                    <Text
-                      className="text-[#8B0000] text-[10px] font-black uppercase tracking-tighter"
-                      numberOfLines={1}
-                    >
-                      {name}
-                    </Text>
-                  </TouchableOpacity>
-                  <Text
-                    className={`text-base font-black ${totals[idx] >= 0 ? "text-blue-800" : "text-red-700"}`}
-                  >
-                    {isHidden
-                      ? "***"
-                      : totals[idx] > 0
-                        ? `+${totals[idx]}`
-                        : totals[idx]}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
+        <TableHeader
+          players={currentSession.players}
+          totals={totals}
+          dealerIndex={currentSession.dealerIndex}
+          colWidth={colWidth}
+          indexColWidth={indexColWidth}
+          isHidden={isHidden}
+          editPlayerName={editPlayerName}
+        />
 
         <ScrollView
           ref={tableScrollRef}
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: 50 }}
+          contentContainerStyle={{
+            paddingBottom: isKeyboardVisible ? 100 : 80, // Reduced from 150 to 100
+          }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           nestedScrollEnabled={true}
         >
           {currentSession.rounds.map((round, rIdx) => (
-            <View
+            <TableRow
               key={rIdx}
-              className={`flex-row items-center py-2.5 px-2 border-b border-white/5 ${rIdx % 2 === 0 ? "bg-white/5" : ""}`}
-            >
-              <TouchableOpacity
-                onLongPress={() => deleteRound(rIdx)}
-                activeOpacity={0.6}
-                style={{ width: indexColWidth }}
-                className="h-7 items-center justify-center rounded-md mr-1 bg-[#FFD700]/30"
-              >
-                <Text className="text-[#8B0000] text-xs font-black">
-                  {rIdx + 1}
-                </Text>
-              </TouchableOpacity>
-
-              {round.map((val, pIdx) => {
-                const numVal = parseFloat(val || 0);
-                const isDealer = currentSession.dealerIndex === pIdx;
-                let textColor = "text-[#8B0000]"; // Mặc định
-
-                if (numVal > 0) {
-                  textColor = "text-blue-600"; // Số dương: xanh
-                } else if (numVal < 0) {
-                  textColor = "text-red-600"; // Số âm: đỏ
-                } else if (isDealer) {
-                  textColor = "text-[#D41F3D]"; // Nhà cái (0): đỏ đậm
-                }
-
-                return (
-                  <View
-                    key={pIdx}
-                    style={{ width: colWidth }}
-                    className="mr-1 h-14"
-                  >
-                    <TextInput
-                      ref={(el) => (inputRefs.current[`${rIdx}-${pIdx}`] = el)}
-                      keyboardType="numeric"
-                      className={`text-center font-bold text-base w-full h-full ${textColor}`}
-                      value={isHidden ? "***" : val === "0" ? "" : val}
-                      onChangeText={(text) =>
-                        !isHidden && updateRoundValue(rIdx, pIdx, text)
-                      }
-                      onSubmitEditing={() => handleInputSubmit(rIdx, pIdx)}
-                      returnKeyType={
-                        pIdx === currentSession.players.length - 1
-                          ? "done"
-                          : "next"
-                      }
-                      blurOnSubmit={pIdx === currentSession.players.length - 1}
-                      placeholder="0"
-                      placeholderTextColor="rgba(17, 17, 17, 0.4)"
-                      selectTextOnFocus
-                      editable={
-                        !isHidden &&
-                        currentSession.dealerIndex !== pIdx &&
-                        rIdx === currentSession.rounds.length - 1
-                      } // Chỉ sửa dòng cuối
-                      pointerEvents={
-                        currentSession.dealerIndex === pIdx ||
-                        rIdx !== currentSession.rounds.length - 1
-                          ? "none"
-                          : "auto"
-                      }
-                    />
-                    {currentSession.dealerIndex !== pIdx &&
-                      rIdx === currentSession.rounds.length - 1 && (
-                        <TouchableOpacity
-                          className="absolute inset-0"
-                          activeOpacity={1}
-                          onPress={() =>
-                            inputRefs.current[`${rIdx}-${pIdx}`]?.focus()
-                          }
-                        />
-                      )}
-                  </View>
-                );
-              })}
-              <View className="w-8" />
-            </View>
+              round={round}
+              rIdx={rIdx}
+              dealerIndex={currentSession.dealerIndex}
+              colWidth={colWidth}
+              indexColWidth={indexColWidth}
+              inputRefs={inputRefs}
+              isHidden={isHidden}
+              updateRoundValue={updateRoundValue}
+              handleInputSubmit={handleInputSubmit}
+              deleteRound={deleteRound}
+              isLastRow={rIdx === currentSession.rounds.length - 1}
+              playerCount={currentSession.players.length}
+            />
           ))}
 
           <View className="flex-row px-2 py-4">
@@ -223,23 +247,21 @@ const TableBodyComponent = React.memo(
             </View>
           </View>
 
-          {!isKeyboardVisible && (
-            <View className="items-center mt-16 mb-40 opacity-40">
-              <Text className="text-[#8B0000] text-[12px] font-black uppercase tracking-[3px]">
-                Dân Chơi Tính Tiền
-              </Text>
-              <Text className="text-[#8B0000] text-[10px] font-bold uppercase tracking-[2px] mt-0.5 opacity-60">
-                Created by
-              </Text>
-              <Text
-                className="text-[#8B0000] text-lg font-black italic mt-1"
-                style={{ letterSpacing: 1 }}
-              >
-                Khoa Ryo
-              </Text>
-              <View className="w-12 h-[1px] bg-[#FFD700] mt-2" />
-            </View>
-          )}
+          <View className="items-center mt-16 mb-40 opacity-40">
+            <Text className="text-[#8B0000] text-[12px] font-black uppercase tracking-[3px]">
+              Dân Chơi Tính Tiền
+            </Text>
+            <Text className="text-[#8B0000] text-[10px] font-bold uppercase tracking-[2px] mt-0.5 opacity-60">
+              Created by
+            </Text>
+            <Text
+              className="text-[#8B0000] text-lg font-black italic mt-1"
+              style={{ letterSpacing: 1 }}
+            >
+              Khoa Ryo
+            </Text>
+            <View className="w-12 h-[1px] bg-[#FFD700] mt-2" />
+          </View>
           <View className="h-16" />
         </ScrollView>
 

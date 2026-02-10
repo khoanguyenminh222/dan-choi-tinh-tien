@@ -3,7 +3,8 @@ export const calculateSessionTotals = (session) => {
     session.rounds.forEach(round => {
         round.forEach((val, idx) => {
             if (idx < totals.length) {
-                totals[idx] += parseFloat(val || 0);
+                const num = parseFloat(val || 0);
+                totals[idx] += isNaN(num) ? 0 : num;
             }
         });
     });

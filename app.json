@@ -3,7 +3,7 @@
     "name": "Dân Chơi Tính Tiền",
     "slug": "dan-choi-tinh-tien",
     "version": "1.0.1",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,

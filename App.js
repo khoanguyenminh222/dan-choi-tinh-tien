@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Alert, useWindowDimensions, Share, Keyboard, BackHandler } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, useWindowDimensions, Share, Keyboard, BackHandler, ScrollView } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 import PremiumSplash from './components/PremiumSplash';
@@ -147,23 +147,24 @@ export default function App() {
   useEffect(() => {
     if (currentSessionId && currentSession?.rounds?.length > 0) {
       const timer = setTimeout(() => {
+        // Always scroll to end when rounds are added to ensure visibility
         if (tableScrollRef.current) {
           tableScrollRef.current.scrollToEnd({ animated: true });
         }
+
         // Auto-focus the first editable input of the new row (skip dealer)
         const newRowIdx = currentSession.rounds.length - 1;
         let firstEditableIdx = 0;
 
-        // Nếu nhà cái ở vị trí đầu tiên, focus vào ô thứ 2
         if (currentSession.dealerIndex === 0) {
           firstEditableIdx = 1;
         }
 
         inputRefs.current[`${newRowIdx}-${firstEditableIdx}`]?.focus();
-      }, 500); // Reduced delay for better feel
+      }, 300); // Reduced delay for snappier feel
       return () => clearTimeout(timer);
     }
-  }, [currentSession?.rounds?.length]);
+  }, [currentSession?.rounds?.length, currentSessionId]);
 
   const createSession = () => {
     setInputModal({
@@ -180,7 +181,7 @@ export default function App() {
           id,
           name: finalName,
           players: ['Người 1', 'Người 2', 'Người 3', 'Người 4'],
-          rounds: [['0', '0', '0', '0']],
+          rounds: [['', '', '', '']],
           baseline: [0, 0, 0, 0], // Store starting/carried over values
           dealerIndex: null, // Thêm chỉ số nhà cái
           createdAt: new Date().toISOString()
@@ -284,7 +285,7 @@ export default function App() {
           const updated = {
             ...currentSession,
             players: [...currentSession.players, name.trim()],
-            rounds: currentSession.rounds.map(r => [...r, '0']),
+            rounds: currentSession.rounds.map(r => [...r, '']),
             baseline: currentSession.baseline ? [...currentSession.baseline, 0] : [0],
             dealerIndex: currentSession.dealerIndex // Giữ nguyên index nhà cái
           };
@@ -296,7 +297,7 @@ export default function App() {
   };
 
   const addRound = () => {
-    const newRound = currentSession.players.map(() => '0');
+    const newRound = currentSession.players.map(() => '');
     updateSession({
       ...currentSession,
       rounds: [...currentSession.rounds, newRound]
@@ -313,7 +314,8 @@ export default function App() {
       let otherTotal = 0;
       updatedRounds[roundIdx].forEach((v, idx) => {
         if (idx !== dealerIdx) {
-          otherTotal += parseFloat(v || 0);
+          const num = parseFloat(v || 0);
+          otherTotal += isNaN(num) ? 0 : num;
         }
       });
       updatedRounds[roundIdx][dealerIdx] = String(-otherTotal);
@@ -324,10 +326,7 @@ export default function App() {
 
   const handleInputSubmit = (rIdx, pIdx) => {
     const val = currentSession.rounds[rIdx][pIdx];
-    // Requirement 3: If no value, fill 0
-    if (val.trim() === '') {
-      updateRoundValue(rIdx, pIdx, '0');
-    }
+    // Removed auto-fill 0 on submit
 
     // Requirement 1: Jump to next input (skip dealer)
     let nextPIdx = pIdx + 1;
@@ -688,7 +687,7 @@ export default function App() {
           {showStats && (
             <View className="absolute inset-0 bg-black/50 items-center justify-center z-50">
               <View className="bg-white p-7 rounded-[40px] w-[88%] shadow-2xl relative">
-                {currentSession.players.some((p, i) => p.toLowerCase().includes('uyên') && totals[i] < 0) && (
+                {currentSession.rounds.length > 6 && currentSession.players.some((p, i) => p.toLowerCase().includes('uyên') && totals[i] < 0) && (
                   <TouchableOpacity
                     onPress={() => setIsUyenMode(!isUyenMode)}
                     className={`absolute top-6 right-6 z-10 flex-row items-center px-3 py-1.5 rounded-full border ${isUyenMode ? 'bg-pink-50 border-pink-200' : 'bg-gray-50 border-gray-200'}`}
@@ -798,7 +797,7 @@ export default function App() {
           )}
 
           {/* Floating Uyen Mode Badge */}
-          {currentSessionId && currentSession?.players?.some((p, i) => p.toLowerCase().includes('uyên') && (totals[i] < 0 || isUyenMode)) && !isKeyboardVisible && (
+          {currentSessionId && currentSession.rounds.length > 6 && currentSession?.players?.some((p, i) => p.toLowerCase().includes('uyên') && (totals[i] < 0 || isUyenMode)) && !isKeyboardVisible && (
             <TouchableOpacity
               onPress={() => setIsUyenMode(!isUyenMode)}
               className={`absolute bottom-24 right-5 px-4 py-2 rounded-full shadow-2xl flex-row items-center z-40 ${isUyenMode ? 'bg-pink-100 border-2 border-pink-300' : 'bg-white/95 border border-gray-200'}`}
