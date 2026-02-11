@@ -561,7 +561,7 @@ export default function App() {
         })
         .join('\n');
 
-      const message = `🧧 Bảng Điểm - ${currentSession.name} 🧧\n\n${standings}\n\nChúc mừng năm mới! 🎉`;
+      const message = `🧧 KẾT QUẢ SÁT PHẠT - ${currentSession.name.toUpperCase()} 🧧\n\n${standings}\n\n"Nhà cái không đánh bại người chơi. Họ chỉ cho người chơi cơ hội để tự đánh bại chính mình."\n\nTiền chỉ là con số, quan trọng là niềm vui! 🧧✨\nChúc mừng năm mới! 🎉`;
 
       await Share.share({
         message,
