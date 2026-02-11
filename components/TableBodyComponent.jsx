@@ -137,10 +137,17 @@ const TableRow = React.memo(
           }
 
           return (
-            <View key={pIdx} style={{ width: colWidth }} className="mr-1 h-14">
+            <View
+              key={pIdx}
+              style={{ width: colWidth }}
+              className="mr-1 h-14"
+              pointerEvents={isDealer || !isLastRow ? "none" : "auto"}
+            >
               <TextInput
                 ref={(el) => (inputRefs.current[`${rIdx}-${pIdx}`] = el)}
                 keyboardType="numeric"
+                multiline={false}
+                scrollEnabled={false}
                 className={`text-center font-bold text-base w-full h-full ${textColor}`}
                 value={isHidden ? "***" : val}
                 onChangeText={(text) =>
@@ -153,7 +160,6 @@ const TableRow = React.memo(
                 placeholderTextColor="rgba(17, 17, 17, 0.4)"
                 selectTextOnFocus={true}
                 editable={!isHidden && !isDealer && isLastRow}
-                pointerEvents={isDealer || !isLastRow ? "none" : "auto"}
               />
             </View>
           );
@@ -207,7 +213,6 @@ const TableBodyComponent = React.memo(
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          nestedScrollEnabled={true}
         >
           {currentSession.rounds.map((round, rIdx) => (
             <TableRow

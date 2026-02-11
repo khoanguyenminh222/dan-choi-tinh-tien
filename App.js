@@ -149,7 +149,6 @@ export default function App() {
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
-  // Controlled Auto-scroll: Only when round count changes
   useEffect(() => {
     if (currentSessionId && currentSession?.rounds?.length > 0) {
       const timer = setTimeout(() => {
@@ -171,6 +170,12 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [currentSession?.rounds?.length, currentSessionId]);
+
+  // Reset states when switching sessions or returning to list
+  useEffect(() => {
+    setIsUyenMode(false);
+    setIsHidden(false);
+  }, [currentSessionId]);
 
   const createSession = () => {
     setInputModal({
@@ -397,10 +402,14 @@ export default function App() {
         text: 'Đồng ý',
         style: 'destructive',
         onPress: () => {
+          setIsUyenMode(false);
+          setIsHidden(false);
           updateSession({
             ...currentSession,
-            rounds: [],
-            baseline: currentSession.players.map(() => 0)
+            rounds: [currentSession.players.map(() => '')],
+            baseline: currentSession.players.map(() => 0),
+            totalRoundsCount: 1,
+            isUyenModeUnlocked: false
           });
         }
       }
@@ -515,8 +524,8 @@ export default function App() {
       let debt = 0;
       if (isUyenMode) {
         currentSession.players.forEach((p, i) => {
-          if (p.toLowerCase().includes('uyên') && currentTotals[i] < 0) {
-            debt += Math.abs(currentTotals[i]) * 2;
+          if (p.trim().toLowerCase() === 'uyên' && currentTotals[i] < 0) {
+            debt += Math.abs(currentTotals[i]);
           }
         });
       }
@@ -525,32 +534,25 @@ export default function App() {
         .map((name, i) => {
           let score = adjustedTotals[i];
           let extraMsg = '';
-          const isUyen = name.toLowerCase().includes('uyên');
-          const isKhoa = name.toLowerCase().includes('khoa');
+          const isUyen = name.trim().toLowerCase() === 'uyên';
           const isDealer = i === currentSession.dealerIndex;
 
           if (isUyenMode) {
             if (isUyen && currentTotals[i] < 0) {
               extraMsg = ' (✨ Kích hoạt năng lực ẩn: Người yêu Khoa Ryo ✨)';
             } else if (debt > 0) {
-              // Check if this person paid the debt
-              let targetIdx = currentSession.players.findIndex(p => p.trim().toLowerCase() === 'khoa');
-              if (targetIdx !== -1) {
-                if (i === targetIdx) extraMsg = ' (Chuyện khó để anh lo 💸)';
-              } else {
-                const dealerIdx = currentSession.dealerIndex;
-                const isUyenDealer = dealerIdx !== null && dealerIdx !== -1 && currentSession.players[dealerIdx].trim().toLowerCase() === 'uyên';
+              // Determine the payer label
+              let khoaIdx = currentSession.players.findIndex(p => p.trim().toLowerCase() === 'khoa');
+              let dealerIdx = currentSession.dealerIndex;
+              let isUyenDealer = dealerIdx !== null && dealerIdx !== -1 && currentSession.players[dealerIdx].trim().toLowerCase() === 'uyên';
 
-                if (isUyenDealer) {
-                  const isUyen = name.trim().toLowerCase() === 'uyên';
-                  if (!isUyen) extraMsg = ' (Dân chơi cùng gánh 💸)';
-                } else if (i === dealerIdx) {
-                  extraMsg = ' (Cái chịu trận 💸)';
-                } else if (dealerIdx === null || dealerIdx === -1) {
-                  // Fallback
-                  const fallbackIdx = currentSession.players.findIndex(p => p.trim().toLowerCase() !== 'uyên');
-                  if (i === fallbackIdx) extraMsg = ' (Gánh team 💸)';
-                }
+              if (khoaIdx !== -1) {
+                if (i === khoaIdx) extraMsg = ' (Chuyện khó để anh lo 💸)';
+              } else if (!isUyenDealer && dealerIdx !== null && dealerIdx !== -1) {
+                if (i === dealerIdx) extraMsg = ' (Cái chịu trận 💸)';
+              } else {
+                // Shared debt
+                if (!isUyen) extraMsg = ' (Dân chơi cùng gánh 💸)';
               }
             }
           }
@@ -767,41 +769,50 @@ export default function App() {
                       let debt = 0;
                       currentSession.players.forEach((p, i) => {
                         if (p.trim().toLowerCase() === 'uyên' && totals[i] < 0) {
-                          debt += Math.abs(totals[i]) * 2;
+                          debt += Math.abs(totals[i]);
                         }
                       });
 
-                      // 2. Determine who/how to pay
-                      let payerIdx = currentSession.players.findIndex(p => p.trim().toLowerCase() === 'khoa');
-                      let isDistributed = false;
+                      // 2. Determine who/how to pay (Priority: Khoa > Dealer > Shared)
+                      let khoaIdx = currentSession.players.findIndex(p => p.trim().toLowerCase() === 'khoa');
+                      let dealerIdx = currentSession.dealerIndex;
+                      let isUyenDealer = dealerIdx !== null && dealerIdx !== -1 && currentSession.players[dealerIdx].trim().toLowerCase() === 'uyên';
 
-                      if (payerIdx === -1) {
-                        const dealerIdx = currentSession.dealerIndex;
-                        const isUyenDealer = dealerIdx !== null && dealerIdx !== -1 && currentSession.players[dealerIdx].trim().toLowerCase() === 'uyên';
+                      if (khoaIdx !== -1) {
+                        if (idx === khoaIdx) {
+                          finalScore -= debt;
+                          showDebtMsg = '(Chuyện khó để anh lo 💸)';
+                        }
+                      } else if (!isUyenDealer && dealerIdx !== null && dealerIdx !== -1) {
+                        if (idx === dealerIdx) {
+                          finalScore -= debt;
+                          showDebtMsg = '(Cái chịu trận 💸)';
+                        }
+                      } else if (debt > 0) {
+                        // Shared debt
+                        const nonUyenIndices = currentSession.players
+                          .map((p, i) => i)
+                          .filter(i => currentSession.players[i].trim().toLowerCase() !== 'uyên');
 
-                        if (isUyenDealer) {
-                          isDistributed = true;
-                        } else if (dealerIdx !== null && dealerIdx !== -1) {
-                          payerIdx = dealerIdx;
-                        } else {
-                          payerIdx = currentSession.players.findIndex(p => p.trim().toLowerCase() !== 'uyên');
+                        const share = Math.round(debt / Math.max(1, nonUyenIndices.length));
+                        const pIdxInShared = nonUyenIndices.indexOf(idx);
+
+                        if (pIdxInShared !== -1) {
+                          if (pIdxInShared === nonUyenIndices.length - 1) {
+                            // Last person pays the remainder
+                            let distributedDebt = share * (nonUyenIndices.length - 1);
+                            finalScore -= (debt - distributedDebt);
+                          } else {
+                            finalScore -= share;
+                          }
+                          showDebtMsg = '(Dân chơi cùng gánh 💸)';
                         }
                       }
 
-                      // 3. Apply changes for display
+                      // 3. Special handling for Uyên
                       if (name.trim().toLowerCase() === 'uyên' && totals[idx] < 0) {
-                        finalScore = Math.abs(finalScore);
+                        finalScore = 0;
                         showHiddenMsg = true;
-                      } else if (debt > 0) {
-                        if (idx === payerIdx) {
-                          finalScore -= debt;
-                          showDebtMsg = name.trim().toLowerCase() === 'khoa' ? '(Chuyện khó để anh lo 💸)' : '(Cái chịu trận 💸)';
-                        } else if (isDistributed && name.trim().toLowerCase() !== 'uyên') {
-                          const nonUyenCount = currentSession.players.filter(p => p.trim().toLowerCase() !== 'uyên').length;
-                          const share = debt / Math.max(1, nonUyenCount);
-                          finalScore = Math.round((finalScore - share) * 10) / 10;
-                          showDebtMsg = '(Dân chơi cùng gánh 💸)';
-                        }
                       }
                     }
 
