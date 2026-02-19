@@ -5,6 +5,7 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
+  Platform,
 } from "react-native";
 import { Plus, EyeOff, Flag, CheckCheck, Sigma } from "lucide-react-native";
 
@@ -146,7 +147,9 @@ const TableRow = React.memo(
             >
               <TextInput
                 ref={(el) => (inputRefs.current[`${rIdx}-${pIdx}`] = el)}
-                keyboardType="numeric"
+                keyboardType={
+                  Platform.OS === "ios" ? "numbers-and-punctuation" : "numeric"
+                }
                 multiline={false}
                 scrollEnabled={false}
                 className={`text-center font-bold text-base w-full h-full ${textColor}`}
