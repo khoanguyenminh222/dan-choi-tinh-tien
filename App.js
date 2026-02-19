@@ -9,7 +9,7 @@ SplashScreen.preventAutoHideAsync();
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Plus, Settings, ChartBar, Dices, ChevronLeft, UserPlus, Share2, Heart, Flag } from 'lucide-react-native';
+import { Plus, Settings, ChartBar, Dices, ChevronLeft, UserPlus, UserMinus, Share2, Heart, Flag } from 'lucide-react-native';
 import "./global.css";
 
 import { calculateSessionTotals, calculateAdjustedTotals } from './utils/gameLogic';
@@ -52,10 +52,21 @@ export default function App() {
     onConfirm: (val) => { },
     icon: null,
   });
+  const [playerOptionsModal, setPlayerOptionsModal] = useState({
+    visible: false,
+    playerIdx: null,
+  });
 
   useEffect(() => {
     const loadData = async () => {
+      // Safety timeout: Ensure app loads even if AsyncStorage is slow/hangs
+      const safetyTimer = setTimeout(() => {
+        setIsLoaded(true);
+        console.log('DEBUG: loadData safety timer fired');
+      }, 3000);
+
       try {
+        console.log('DEBUG: Starting loadData');
         const jsonValue = await AsyncStorage.getItem(STORAGE_KEY);
         if (jsonValue != null) {
           const data = JSON.parse(jsonValue);
@@ -82,6 +93,7 @@ export default function App() {
       } catch (e) {
         console.error('Failed to load data', e);
       } finally {
+        clearTimeout(safetyTimer);
         setIsLoaded(true);
       }
     };
@@ -106,6 +118,10 @@ export default function App() {
       }
 
       // 2. Close other overhead modals
+      if (playerOptionsModal.visible) {
+        setPlayerOptionsModal({ visible: false, playerIdx: null });
+        return true;
+      }
       if (showDice) {
         setShowDice(false);
         return true;
@@ -132,7 +148,7 @@ export default function App() {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
 
     return () => backHandler.remove();
-  }, [inputModal.visible, showDice, showStats, showEnd, currentSessionId]);
+  }, [inputModal.visible, playerOptionsModal.visible, showDice, showStats, showEnd, currentSessionId]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -417,51 +433,10 @@ export default function App() {
   };
 
   const editPlayerName = (idx) => {
-    const isDealer = currentSession.dealerIndex === idx;
-
-    Alert.alert(
-      'Tùy chọn người chơi',
-      `Bạn muốn làm gì với ${currentSession.players[idx]}?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Đổi tên',
-          onPress: () => {
-            setInputModal({
-              visible: true,
-              title: 'Đổi tên',
-              description: 'Nhập tên mới cho người chơi này',
-              placeholder: 'Tên người chơi...',
-              value: currentSession.players[idx],
-              type: 'rename-player',
-              onConfirm: (name) => {
-                const trimmedName = name.trim();
-                if (!trimmedName) return;
-
-                if (currentSession.players.some((p, pIdx) => pIdx !== idx && p.toLowerCase() === trimmedName.toLowerCase())) {
-                  Alert.alert('Lỗi', 'Tên người chơi đã tồn tại trong bàn!');
-                  return;
-                }
-
-                const updatedPlayers = [...currentSession.players];
-                updatedPlayers[idx] = trimmedName;
-                updateSession({ ...currentSession, players: updatedPlayers });
-              },
-              icon: <Settings size={32} color="#FF6A88" />
-            });
-          }
-        },
-        {
-          text: isDealer ? 'Hủy làm Cái' : 'Chọn làm Cái',
-          onPress: () => toggleDealer(idx)
-        },
-        {
-          text: 'Xóa người chơi',
-          style: 'destructive',
-          onPress: () => removePlayer(idx)
-        }
-      ]
-    );
+    setPlayerOptionsModal({
+      visible: true,
+      playerIdx: idx,
+    });
   };
 
   const toggleDealer = (idx) => {
@@ -479,11 +454,20 @@ export default function App() {
           const updatedPlayers = currentSession.players.filter((_, i) => i !== idx);
           const updatedRounds = currentSession.rounds.map(r => r.filter((_, i) => i !== idx));
           const updatedBaseline = currentSession.baseline ? currentSession.baseline.filter((_, i) => i !== idx) : [];
+
+          let newDealerIndex = currentSession.dealerIndex;
+          if (idx === currentSession.dealerIndex) {
+            newDealerIndex = null;
+          } else if (currentSession.dealerIndex !== null && idx < currentSession.dealerIndex) {
+            newDealerIndex = currentSession.dealerIndex - 1;
+          }
+
           updateSession({
             ...currentSession,
             players: updatedPlayers,
             rounds: updatedRounds,
-            baseline: updatedBaseline
+            baseline: updatedBaseline,
+            dealerIndex: newDealerIndex
           });
         }
       }
@@ -586,7 +570,11 @@ export default function App() {
   }, [currentSession?.rounds, currentSession?.players, currentSessionId, currentSession?.totalRoundsCount]);
 
   if (showPremiumSplash || !isLoaded) {
-    return <PremiumSplash onFinish={() => setShowPremiumSplash(false)} isDataLoaded={isLoaded} />;
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <PremiumSplash onFinish={() => setShowPremiumSplash(false)} isDataLoaded={isLoaded} />
+      </View>
+    );
   }
 
 
@@ -603,11 +591,12 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <View className="flex-1">
+      <View className="flex-1" style={{ flex: 1 }}>
         <StatusBar style="dark" />
         <LinearGradient
           colors={['#FFF8E1', '#FADADD', '#FFF8E1']}
           className="flex-1"
+          style={{ flex: 1 }}
         >
           <StaticBackground />
 
@@ -854,7 +843,86 @@ export default function App() {
             </View>
           )}
 
+
+          {/* Player Options Modal Overlay */}
+          {playerOptionsModal.visible && (
+            <View className="absolute inset-0 bg-black/50 items-center justify-center z-50">
+              <View className="bg-white p-7 rounded-[40px] w-[88%] shadow-2xl relative">
+                <Text className="text-[#8B0000] text-2xl font-black mb-2 text-center uppercase tracking-tight">Tùy Chọn</Text>
+                <Text className="text-gray-500 text-center mb-8 font-medium">Bạn muốn làm gì với {currentSession.players[playerOptionsModal.playerIdx]}?</Text>
+
+                <View className="flex-col w-full gap-3">
+                  <TouchableOpacity
+                    onPress={() => {
+                      const idx = playerOptionsModal.playerIdx;
+                      setPlayerOptionsModal({ visible: false, playerIdx: null });
+                      setInputModal({
+                        visible: true,
+                        title: 'Đổi tên',
+                        description: 'Nhập tên mới cho người chơi này',
+                        placeholder: 'Tên người chơi...',
+                        value: currentSession.players[idx],
+                        type: 'rename-player',
+                        onConfirm: (name) => {
+                          const trimmedName = name.trim();
+                          if (!trimmedName) return;
+
+                          if (currentSession.players.some((p, pIdx) => pIdx !== idx && p.toLowerCase() === trimmedName.toLowerCase())) {
+                            Alert.alert('Lỗi', 'Tên người chơi đã tồn tại trong bàn!');
+                            return;
+                          }
+
+                          const updatedPlayers = [...currentSession.players];
+                          updatedPlayers[idx] = trimmedName;
+                          updateSession({ ...currentSession, players: updatedPlayers });
+                        },
+                        icon: <Settings size={32} color="#FF6A88" />
+                      });
+                    }}
+                    className="bg-gray-50 py-4 rounded-2xl items-center flex-row px-5 border border-gray-100"
+                  >
+                    <Settings size={20} color="#8B0000" />
+                    <Text className="text-[#8B0000] font-bold ml-3 text-base">Đổi tên</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      toggleDealer(playerOptionsModal.playerIdx);
+                      setPlayerOptionsModal({ visible: false, playerIdx: null });
+                    }}
+                    className="bg-gray-50 py-4 rounded-2xl items-center flex-row px-5 border border-gray-100"
+                  >
+                    <Flag size={20} color="#D41F3D" />
+                    <Text className="text-[#D41F3D] font-bold ml-3 text-base">
+                      {currentSession.dealerIndex === playerOptionsModal.playerIdx ? 'Hủy làm Cái' : 'Chọn làm Cái'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      const idx = playerOptionsModal.playerIdx;
+                      setPlayerOptionsModal({ visible: false, playerIdx: null });
+                      removePlayer(idx);
+                    }}
+                    className="bg-red-50 py-4 rounded-2xl items-center flex-row px-5 border border-red-100"
+                  >
+                    <UserMinus size={20} color="#D41F3D" />
+                    <Text className="text-[#D41F3D] font-bold ml-3 text-base">Xóa người chơi</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setPlayerOptionsModal({ visible: false, playerIdx: null })}
+                    className="mt-4 bg-[#D41F3D] py-4 rounded-2xl items-center shadow-lg active:scale-95"
+                  >
+                    <Text className="text-white font-black uppercase">Đóng</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
+
           {/* End Session Modal Overlay */}
+
           {showEnd && (
             <View className="absolute inset-0 bg-black/50 items-center justify-center z-50">
               <View className="bg-white p-7 rounded-[40px] w-[88%] shadow-2xl items-center">

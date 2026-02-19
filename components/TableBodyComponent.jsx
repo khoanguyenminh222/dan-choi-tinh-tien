@@ -17,6 +17,7 @@ const TableHeader = React.memo(
     indexColWidth,
     isHidden,
     editPlayerName,
+    removePlayer,
   }) => {
     return (
       <View className="bg-[#FFF8E1] border-b-2 border-[#FFD700] shadow-sm z-10 py-1.5 px-2 mt-2">

@@ -18,6 +18,19 @@ const PremiumSplash = ({ onFinish, isDataLoaded }) => {
   const backgroundOpacity = useSharedValue(1);
 
   useEffect(() => {
+    // Hide native splash once the JS component is mounted
+    // We do it here to ensure it always happens, even if the image fails to load
+    const hideSplash = async () => {
+      try {
+        await SplashScreen.hideAsync();
+      } catch (e) {
+        console.log("SplashScreen hide error", e);
+      }
+    };
+
+    // Give it a tiny bit of time to render the first frame
+    setTimeout(hideSplash, 100);
+
     // Start animation sequence
     opacity.value = withTiming(1, {
       duration: 1000,
@@ -28,6 +41,14 @@ const PremiumSplash = ({ onFinish, isDataLoaded }) => {
       duration: 2500,
       easing: Easing.out(Easing.quad),
     });
+
+    // Safety timeout: If after 3 seconds we haven't finished, force finish
+    const safetyTimer = setTimeout(() => {
+      if (onFinish) {
+        console.log("PremiumSplash safety timer fired");
+        onFinish();
+      }
+    }, 3000);
 
     // Wait for minimum time AND data to be loaded before exiting
     if (isDataLoaded) {
@@ -44,8 +65,13 @@ const PremiumSplash = ({ onFinish, isDataLoaded }) => {
           },
         );
       }, 2000); // Keep for at least 2 seconds for branding
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(safetyTimer);
+      };
     }
+
+    return () => clearTimeout(safetyTimer);
   }, [isDataLoaded]);
 
   const animatedImageStyle = useAnimatedStyle(() => ({
@@ -59,21 +85,16 @@ const PremiumSplash = ({ onFinish, isDataLoaded }) => {
 
   return (
     <Animated.View
-      style={[styles.container, animatedContainerStyle]}
-      className="bg-black"
+      style={[
+        styles.container,
+        animatedContainerStyle,
+        { flex: 1, backgroundColor: "#000" },
+      ]}
     >
       <Animated.Image
         source={require("../assets/splash-icon.png")}
         style={[styles.image, animatedImageStyle]}
         resizeMode="cover"
-        onLoad={async () => {
-          // Hide native splash once the JS image is actually rendered
-          try {
-            await SplashScreen.hideAsync();
-          } catch (e) {
-            console.log("SplashScreen hide error", e);
-          }
-        }}
       />
 
       {/* Subtle overlay for depth */}
@@ -89,12 +110,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 9999,
+    backgroundColor: "#000",
   },
   image: {
     width: width,
